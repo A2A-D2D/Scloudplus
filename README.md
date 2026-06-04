@@ -1,4 +1,4 @@
-# Scloudplus
+# Scloudplus 
 
 Verilog-2001 RTL prototype for the Scloud+ matrix-multiplication datapath.
 
