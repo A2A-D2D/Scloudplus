@@ -1,6 +1,6 @@
 # Scloud+ Block Matrix Multiplier
 
-This directory contains a Verilog-2001 reproduction of the matrix-multiplication core described in Section 3.2 of `fast-scloud+.pdf`. The compute datapath is explicitly expanded for the Scloud+ paper block size `b=8`, and smaller active task shapes are supported by runtime lane masks.
+This directory contains a Verilog-2001 reproduction of the matrix-multiplication core described in Section 3.2 of `fast-scloud+.pdf`. The compute datapath uses Verilog `generate` blocks for regular PE and lane replication, while avoiding Verilog `function`/`task` definitions in synthesizable RTL.
 
 ## Paper Mapping
 
@@ -14,16 +14,16 @@ The selected terms are summed and the low `q` bits are kept, giving reduction mo
 
 ## Files
 
-- `scloudplus_bmm_pe.v`: one fixed 8-lane PE for a ternary dot product.
-- `scloudplus_bmm_block.v`: fixed 8x8 block multiply with 64 explicit PEs.
-- `scloudplus_block_add.v`: fixed 8x8 element-wise block accumulation modulo `2^q`.
+- `scloudplus_bmm_pe.v`: one parameterized PE for a ternary dot product.
+- `scloudplus_bmm_block.v`: parameterized `b x b` block multiply with `b^2` generated PEs.
+- `scloudplus_block_add.v`: generated element-wise block accumulation modulo `2^q`.
 - `scloudplus_matmul_serial.v`: block scheduler using one block multiplier over `(row, inner, col)` block indices.
 
 ## Runtime Configuration
 
 The main configurable ports are:
 
-- `cfg_b_active`: active block edge length from 1 to 8.
+- `cfg_b_active`: active block edge length, up to the synthesis parameter `B`.
 - `cfg_q_active`: active modulus width, up to the synthesis parameter `Q_WIDTH`; results are reduced modulo `2^cfg_q_active`.
 - `cfg_coeff_mode`: coefficient interpretation for the right matrix.
   - `0`: ternary Scloud+ mode, `00/11 = 0`, `01 = +1`, `10 = -1`.
@@ -35,4 +35,4 @@ The main configurable ports are:
 
 The RTL uses packed Verilog-2001 buses rather than unpacked array ports. Element `(row, col)` of a packed `b x b` block is stored at bit slice `(row*B+col)*WIDTH +: WIDTH`.
 
-For the Scloud+ paper default, synthesize with `B=8` and `Q_WIDTH=12`, then set `cfg_b_active=8`, `cfg_q_active=12`, and `cfg_coeff_mode=0`. The RTL intentionally avoids Verilog `generate` blocks and Verilog `function` definitions in the synthesizable datapath; keep `B=8` when instantiating this version.
+For the Scloud+ paper default, synthesize with `B=8` and `Q_WIDTH=12`, then set `cfg_b_active=8`, `cfg_q_active=12`, and `cfg_coeff_mode=0`. For a larger reusable instance, increase `B` or `Q_WIDTH` at synthesis time and run smaller tasks by lowering the active configuration.
