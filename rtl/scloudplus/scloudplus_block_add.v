@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 // Module: scloudplus_block_add
-// Purpose: element-wise block addition modulo 2^q.
+// Purpose: fixed 8x8 element-wise block addition modulo 2^q.
 
 module scloudplus_block_add #(
     parameter B = 8,
@@ -8,25 +8,41 @@ module scloudplus_block_add #(
     parameter CFG_WIDTH = 8
 ) (
     input  wire [CFG_WIDTH-1:0]     cfg_q_active,
-    input  wire [B*B*Q_WIDTH-1:0] a_block,
-    input  wire [B*B*Q_WIDTH-1:0] b_block,
-    output wire [B*B*Q_WIDTH-1:0] y_block
+    input  wire [B*B*Q_WIDTH-1:0]   a_block,
+    input  wire [B*B*Q_WIDTH-1:0]   b_block,
+    output wire [B*B*Q_WIDTH-1:0]   y_block
 );
 
+    wire [Q_WIDTH:0]   q_one_ext;
+    wire [Q_WIDTH:0]   q_mask_ext;
     wire [Q_WIDTH-1:0] q_mask;
-    genvar p;
-    genvar bit_idx;
 
-    generate
-        for (bit_idx = 0; bit_idx < Q_WIDTH; bit_idx = bit_idx + 1) begin : g_q_mask
-            assign q_mask[bit_idx] = (bit_idx[CFG_WIDTH-1:0] < cfg_q_active);
-        end
-    endgenerate
+    assign q_one_ext = {{Q_WIDTH{1'b0}}, 1'b1};
+    assign q_mask_ext = (cfg_q_active >= Q_WIDTH[CFG_WIDTH-1:0]) ? {1'b0, {Q_WIDTH{1'b1}}} :
+                        ((q_one_ext << cfg_q_active) - {{Q_WIDTH{1'b0}}, 1'b1});
+    assign q_mask = q_mask_ext[Q_WIDTH-1:0];
 
-    generate
-        for (p = 0; p < B*B; p = p + 1) begin : g_add
-            assign y_block[p*Q_WIDTH +: Q_WIDTH] = (a_block[p*Q_WIDTH +: Q_WIDTH] + b_block[p*Q_WIDTH +: Q_WIDTH]) & q_mask;
-        end
-    endgenerate
+`define SCLOUDPLUS_ADD_CELL(IDX) \
+    assign y_block[(IDX)*Q_WIDTH +: Q_WIDTH] = \
+        (a_block[(IDX)*Q_WIDTH +: Q_WIDTH] + b_block[(IDX)*Q_WIDTH +: Q_WIDTH]) & q_mask;
+
+    `SCLOUDPLUS_ADD_CELL(0)  `SCLOUDPLUS_ADD_CELL(1)  `SCLOUDPLUS_ADD_CELL(2)  `SCLOUDPLUS_ADD_CELL(3)
+    `SCLOUDPLUS_ADD_CELL(4)  `SCLOUDPLUS_ADD_CELL(5)  `SCLOUDPLUS_ADD_CELL(6)  `SCLOUDPLUS_ADD_CELL(7)
+    `SCLOUDPLUS_ADD_CELL(8)  `SCLOUDPLUS_ADD_CELL(9)  `SCLOUDPLUS_ADD_CELL(10) `SCLOUDPLUS_ADD_CELL(11)
+    `SCLOUDPLUS_ADD_CELL(12) `SCLOUDPLUS_ADD_CELL(13) `SCLOUDPLUS_ADD_CELL(14) `SCLOUDPLUS_ADD_CELL(15)
+    `SCLOUDPLUS_ADD_CELL(16) `SCLOUDPLUS_ADD_CELL(17) `SCLOUDPLUS_ADD_CELL(18) `SCLOUDPLUS_ADD_CELL(19)
+    `SCLOUDPLUS_ADD_CELL(20) `SCLOUDPLUS_ADD_CELL(21) `SCLOUDPLUS_ADD_CELL(22) `SCLOUDPLUS_ADD_CELL(23)
+    `SCLOUDPLUS_ADD_CELL(24) `SCLOUDPLUS_ADD_CELL(25) `SCLOUDPLUS_ADD_CELL(26) `SCLOUDPLUS_ADD_CELL(27)
+    `SCLOUDPLUS_ADD_CELL(28) `SCLOUDPLUS_ADD_CELL(29) `SCLOUDPLUS_ADD_CELL(30) `SCLOUDPLUS_ADD_CELL(31)
+    `SCLOUDPLUS_ADD_CELL(32) `SCLOUDPLUS_ADD_CELL(33) `SCLOUDPLUS_ADD_CELL(34) `SCLOUDPLUS_ADD_CELL(35)
+    `SCLOUDPLUS_ADD_CELL(36) `SCLOUDPLUS_ADD_CELL(37) `SCLOUDPLUS_ADD_CELL(38) `SCLOUDPLUS_ADD_CELL(39)
+    `SCLOUDPLUS_ADD_CELL(40) `SCLOUDPLUS_ADD_CELL(41) `SCLOUDPLUS_ADD_CELL(42) `SCLOUDPLUS_ADD_CELL(43)
+    `SCLOUDPLUS_ADD_CELL(44) `SCLOUDPLUS_ADD_CELL(45) `SCLOUDPLUS_ADD_CELL(46) `SCLOUDPLUS_ADD_CELL(47)
+    `SCLOUDPLUS_ADD_CELL(48) `SCLOUDPLUS_ADD_CELL(49) `SCLOUDPLUS_ADD_CELL(50) `SCLOUDPLUS_ADD_CELL(51)
+    `SCLOUDPLUS_ADD_CELL(52) `SCLOUDPLUS_ADD_CELL(53) `SCLOUDPLUS_ADD_CELL(54) `SCLOUDPLUS_ADD_CELL(55)
+    `SCLOUDPLUS_ADD_CELL(56) `SCLOUDPLUS_ADD_CELL(57) `SCLOUDPLUS_ADD_CELL(58) `SCLOUDPLUS_ADD_CELL(59)
+    `SCLOUDPLUS_ADD_CELL(60) `SCLOUDPLUS_ADD_CELL(61) `SCLOUDPLUS_ADD_CELL(62) `SCLOUDPLUS_ADD_CELL(63)
+
+`undef SCLOUDPLUS_ADD_CELL
 
 endmodule

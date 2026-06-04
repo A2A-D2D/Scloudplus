@@ -2,7 +2,7 @@
 
 module tb_scloudplus_matm_vectors;
 
-    localparam B = 4;
+    localparam B = 8;
     localparam Q_WIDTH = 8;
     localparam ACC_WIDTH = 12;
     localparam IDX_WIDTH = 4;

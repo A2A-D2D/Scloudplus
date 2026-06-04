@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 // Module: scloudplus_matmul_serial
-// Purpose: serial block scheduler for Scloud+ matrix multiplication with one BMM block.
+// Purpose: serial block scheduler using one Scloud+ BMM block.
 
 module scloudplus_matmul_serial #(
     parameter B = 8,

@@ -2,7 +2,7 @@
 
 module tb_scloudplus_bmm;
 
-    localparam B = 4;
+    localparam B = 8;
     localparam Q_WIDTH = 4;
     localparam ACC_WIDTH = 8;
     localparam IDX_WIDTH = 4;
@@ -112,20 +112,20 @@ module tb_scloudplus_bmm;
 
         a_block[0*Q_WIDTH +: Q_WIDTH] = 4'd3;
         a_block[1*Q_WIDTH +: Q_WIDTH] = 4'd5;
-        a_block[4*Q_WIDTH +: Q_WIDTH] = 4'd7;
-        a_block[5*Q_WIDTH +: Q_WIDTH] = 4'd2;
+        a_block[8*Q_WIDTH +: Q_WIDTH] = 4'd7;
+        a_block[9*Q_WIDTH +: Q_WIDTH] = 4'd2;
         s_block[0*2 +: 2] = 2'b01;
         s_block[1*2 +: 2] = 2'b10;
-        s_block[4*2 +: 2] = 2'b00;
-        s_block[5*2 +: 2] = 2'b01;
+        s_block[8*2 +: 2] = 2'b00;
+        s_block[9*2 +: 2] = 2'b01;
         #1;
 
         if (c_direct[0*Q_WIDTH +: Q_WIDTH] !== 4'd3) begin errors = errors + 1; $display("FAIL direct c00"); end
         if (c_direct[1*Q_WIDTH +: Q_WIDTH] !== 4'd2) begin errors = errors + 1; $display("FAIL direct c01"); end
-        if (c_direct[4*Q_WIDTH +: Q_WIDTH] !== 4'd7) begin errors = errors + 1; $display("FAIL direct c10"); end
-        if (c_direct[5*Q_WIDTH +: Q_WIDTH] !== 4'd11) begin errors = errors + 1; $display("FAIL direct c11"); end
+        if (c_direct[8*Q_WIDTH +: Q_WIDTH] !== 4'd7) begin errors = errors + 1; $display("FAIL direct c10"); end
+        if (c_direct[9*Q_WIDTH +: Q_WIDTH] !== 4'd11) begin errors = errors + 1; $display("FAIL direct c11"); end
         if (c_direct[2*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL inactive col"); end
-        if (c_direct[8*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL inactive row"); end
+        if (c_direct[16*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL inactive row"); end
 
         cfg_q_active = 4'd3;
         cfg_coeff_mode = 2'd1;
@@ -147,12 +147,12 @@ module tb_scloudplus_bmm;
         s_block = {B*B*2{1'b0}};
         a_block[0*Q_WIDTH +: Q_WIDTH] = 4'd1;
         a_block[1*Q_WIDTH +: Q_WIDTH] = 4'd2;
-        a_block[4*Q_WIDTH +: Q_WIDTH] = 4'd3;
-        a_block[5*Q_WIDTH +: Q_WIDTH] = 4'd4;
+        a_block[8*Q_WIDTH +: Q_WIDTH] = 4'd3;
+        a_block[9*Q_WIDTH +: Q_WIDTH] = 4'd4;
         s_block[0*2 +: 2] = 2'b01;
         s_block[1*2 +: 2] = 2'b00;
-        s_block[4*2 +: 2] = 2'b01;
-        s_block[5*2 +: 2] = 2'b01;
+        s_block[8*2 +: 2] = 2'b01;
+        s_block[9*2 +: 2] = 2'b01;
         blk_in_valid = 1'b1;
         repeat (2) @(negedge clk);
         blk_in_valid = 1'b0;
@@ -163,12 +163,12 @@ module tb_scloudplus_bmm;
         s_block = {B*B*2{1'b0}};
         a_block[0*Q_WIDTH +: Q_WIDTH] = 4'd5;
         a_block[1*Q_WIDTH +: Q_WIDTH] = 4'd6;
-        a_block[4*Q_WIDTH +: Q_WIDTH] = 4'd7;
-        a_block[5*Q_WIDTH +: Q_WIDTH] = 4'd8;
+        a_block[8*Q_WIDTH +: Q_WIDTH] = 4'd7;
+        a_block[9*Q_WIDTH +: Q_WIDTH] = 4'd8;
         s_block[0*2 +: 2] = 2'b10;
         s_block[1*2 +: 2] = 2'b01;
-        s_block[4*2 +: 2] = 2'b00;
-        s_block[5*2 +: 2] = 2'b10;
+        s_block[8*2 +: 2] = 2'b00;
+        s_block[9*2 +: 2] = 2'b10;
         blk_in_valid = 1'b1;
         repeat (2) @(negedge clk);
         blk_in_valid = 1'b0;
@@ -177,8 +177,8 @@ module tb_scloudplus_bmm;
         #1;
         if (c_block[0*Q_WIDTH +: Q_WIDTH] !== 4'd14) begin errors = errors + 1; $display("FAIL serial c00"); end
         if (c_block[1*Q_WIDTH +: Q_WIDTH] !== 4'd1) begin errors = errors + 1; $display("FAIL serial c01"); end
-        if (c_block[4*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL serial c10"); end
-        if (c_block[5*Q_WIDTH +: Q_WIDTH] !== 4'd3) begin errors = errors + 1; $display("FAIL serial c11"); end
+        if (c_block[8*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL serial c10"); end
+        if (c_block[9*Q_WIDTH +: Q_WIDTH] !== 4'd3) begin errors = errors + 1; $display("FAIL serial c11"); end
         if (c_block[2*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL serial inactive col"); end
 
         wait (done);

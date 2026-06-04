@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-B = 4
+B = 8
 Q_WIDTH = 8
 Q_MOD = 1 << Q_WIDTH
 OUT_DIR = Path(__file__).resolve().parent / "vectors_scloudplus"
@@ -105,16 +105,16 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cases = []
 
-    a_keygen = mat_a(8, 8, 1)
-    s_keygen = mat_s(8, 4, 2)
+    a_keygen = mat_a(16, 16, 1)
+    s_keygen = mat_s(16, 8, 2)
     cases.append(("keygen_as",) + write_case("keygen_as", a_keygen, s_keygen))
 
-    a_enc = mat_a(8, 8, 3)
-    sp_enc = mat_s(4, 8, 4)
+    a_enc = mat_a(16, 16, 3)
+    sp_enc = mat_s(8, 16, 4)
     cases.append(("enc_c1_transpose",) + write_case("enc_c1_transpose", transpose(a_enc), transpose(sp_enc)))
 
-    c1_dec = mat_a(4, 8, 5)
-    s_dec = mat_s(8, 4, 6)
+    c1_dec = mat_a(8, 16, 5)
+    s_dec = mat_s(16, 8, 6)
     cases.append(("dec_c1s",) + write_case("dec_c1s", c1_dec, s_dec))
 
     for item in cases:
