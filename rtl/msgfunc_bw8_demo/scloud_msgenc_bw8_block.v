@@ -13,32 +13,32 @@ module scloud_msgenc_bw8_block
     localparam DELTA_SHIFT = Q_WIDTH - TAU;
     localparam MOD_MASK    = (1 << TAU) - 1;
 
-    wire signed [5:0] v0_re;
-    wire signed [5:0] v0_im;
-    wire signed [5:0] v1_re;
-    wire signed [5:0] v1_im;
-    wire signed [5:0] v2_re;
-    wire signed [5:0] v2_im;
-    wire signed [5:0] v3_re;
-    wire signed [5:0] v3_im;
+    wire [5:0] v0_re;
+    wire [5:0] v0_im;
+    wire [5:0] v1_re;
+    wire [5:0] v1_im;
+    wire [5:0] v2_re;
+    wire [5:0] v2_im;
+    wire [5:0] v3_re;
+    wire [5:0] v3_im;
 
-    wire signed [5:0] s1_0_re;
-    wire signed [5:0] s1_0_im;
-    wire signed [5:0] s1_1_re;
-    wire signed [5:0] s1_1_im;
-    wire signed [5:0] s1_2_re;
-    wire signed [5:0] s1_2_im;
-    wire signed [5:0] s1_3_re;
-    wire signed [5:0] s1_3_im;
+    wire [5:0] s1_0_re;
+    wire [5:0] s1_0_im;
+    wire [5:0] s1_1_re;
+    wire [5:0] s1_1_im;
+    wire [5:0] s1_2_re;
+    wire [5:0] s1_2_im;
+    wire [5:0] s1_3_re;
+    wire [5:0] s1_3_im;
 
-    wire signed [5:0] w0_re;
-    wire signed [5:0] w0_im;
-    wire signed [5:0] w1_re;
-    wire signed [5:0] w1_im;
-    wire signed [5:0] w2_re;
-    wire signed [5:0] w2_im;
-    wire signed [5:0] w3_re;
-    wire signed [5:0] w3_im;
+    wire [5:0] w0_re;
+    wire [5:0] w0_im;
+    wire [5:0] w1_re;
+    wire [5:0] w1_im;
+    wire [5:0] w2_re;
+    wire [5:0] w2_im;
+    wire [5:0] w3_re;
+    wire [5:0] w3_im;
 
     wire [TAU-1:0] w0_re_mod;
     wire [TAU-1:0] w0_im_mod;
