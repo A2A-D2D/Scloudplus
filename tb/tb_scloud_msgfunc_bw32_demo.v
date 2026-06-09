@@ -16,10 +16,7 @@ module tb_scloud_msgfunc_bw32_demo;
     integer error_count;
     integer idx;
 
-    scloud_msgfunc_bw32_demo #(
-        .Q_WIDTH(Q_WIDTH),
-        .TAU    (TAU)
-    ) dut (
+    scloud_msgfunc_bw32_demo dut (
         .msg_in        (msg_in),
         .noise_q_flat  (noise_q_flat),
         .enc_q_flat    (enc_q_flat),
