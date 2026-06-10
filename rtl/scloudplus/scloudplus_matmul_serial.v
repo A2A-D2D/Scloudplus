@@ -5,7 +5,7 @@
 module scloudplus_matmul_serial #(
     parameter B = 8,
     parameter Q_WIDTH = 12,
-    parameter ACC_WIDTH = Q_WIDTH + 4,
+    parameter ACC_WIDTH = Q_WIDTH,
     parameter IDX_WIDTH = 16,
     parameter CFG_WIDTH = 8
 ) (
@@ -27,6 +27,7 @@ module scloudplus_matmul_serial #(
     output reg  [IDX_WIDTH-1:0]         a_col_blk,
     output reg  [IDX_WIDTH-1:0]         s_col_blk,
     input  wire                         blk_in_valid,
+    output wire                         blk_in_ready,
     input  wire [B*B*Q_WIDTH-1:0]       a_block,
     input  wire [B*B*2-1:0]             s_block,
     output reg                          c_block_valid,
@@ -47,6 +48,12 @@ module scloudplus_matmul_serial #(
     reg [B*B*Q_WIDTH-1:0] acc_block;
     reg [B*B*Q_WIDTH-1:0] a_block_r;
     reg [B*B*2-1:0]       s_block_r;
+    reg [CFG_WIDTH-1:0]   cfg_b_active_r;
+    reg [CFG_WIDTH-1:0]   cfg_q_active_r;
+    reg [1:0]             cfg_coeff_mode_r;
+    reg [IDX_WIDTH-1:0]   cfg_row_blocks_r;
+    reg [IDX_WIDTH-1:0]   cfg_inner_blocks_r;
+    reg [IDX_WIDTH-1:0]   cfg_col_blocks_r;
 
     wire [B*B*Q_WIDTH-1:0] product_block;
     wire [B*B*Q_WIDTH-1:0] next_acc_block;
@@ -61,9 +68,10 @@ module scloudplus_matmul_serial #(
     wire last_row;
 
     assign start_ready = (state == ST_IDLE);
-    assign cfg_row_blocks_eff   = (cfg_row_blocks == {IDX_WIDTH{1'b0}}) ? {{(IDX_WIDTH-1){1'b0}}, 1'b1} : cfg_row_blocks;
-    assign cfg_inner_blocks_eff = (cfg_inner_blocks == {IDX_WIDTH{1'b0}}) ? {{(IDX_WIDTH-1){1'b0}}, 1'b1} : cfg_inner_blocks;
-    assign cfg_col_blocks_eff   = (cfg_col_blocks == {IDX_WIDTH{1'b0}}) ? {{(IDX_WIDTH-1){1'b0}}, 1'b1} : cfg_col_blocks;
+    assign blk_in_ready = (state == ST_WAIT);
+    assign cfg_row_blocks_eff   = (cfg_row_blocks_r == {IDX_WIDTH{1'b0}}) ? {{(IDX_WIDTH-1){1'b0}}, 1'b1} : cfg_row_blocks_r;
+    assign cfg_inner_blocks_eff = (cfg_inner_blocks_r == {IDX_WIDTH{1'b0}}) ? {{(IDX_WIDTH-1){1'b0}}, 1'b1} : cfg_inner_blocks_r;
+    assign cfg_col_blocks_eff   = (cfg_col_blocks_r == {IDX_WIDTH{1'b0}}) ? {{(IDX_WIDTH-1){1'b0}}, 1'b1} : cfg_col_blocks_r;
     assign cfg_row_last         = cfg_row_blocks_eff - {{(IDX_WIDTH-1){1'b0}}, 1'b1};
     assign cfg_inner_last       = cfg_inner_blocks_eff - {{(IDX_WIDTH-1){1'b0}}, 1'b1};
     assign cfg_col_last         = cfg_col_blocks_eff - {{(IDX_WIDTH-1){1'b0}}, 1'b1};
@@ -77,9 +85,9 @@ module scloudplus_matmul_serial #(
         .ACC_WIDTH(ACC_WIDTH),
         .CFG_WIDTH(CFG_WIDTH)
     ) u_bmm_block (
-        .cfg_b_active(cfg_b_active),
-        .cfg_q_active(cfg_q_active),
-        .cfg_coeff_mode(cfg_coeff_mode),
+        .cfg_b_active(cfg_b_active_r),
+        .cfg_q_active(cfg_q_active_r),
+        .cfg_coeff_mode(cfg_coeff_mode_r),
         .a_block(a_block_r),
         .s_block(s_block_r),
         .c_block(product_block)
@@ -90,7 +98,7 @@ module scloudplus_matmul_serial #(
         .Q_WIDTH(Q_WIDTH),
         .CFG_WIDTH(CFG_WIDTH)
     ) u_acc_add (
-        .cfg_q_active(cfg_q_active),
+        .cfg_q_active(cfg_q_active_r),
         .a_block(acc_block),
         .b_block(product_block),
         .y_block(next_acc_block)
@@ -112,6 +120,12 @@ module scloudplus_matmul_serial #(
             acc_block       <= {B*B*Q_WIDTH{1'b0}};
             a_block_r       <= {B*B*Q_WIDTH{1'b0}};
             s_block_r       <= {B*B*2{1'b0}};
+            cfg_b_active_r   <= {CFG_WIDTH{1'b0}};
+            cfg_q_active_r   <= {CFG_WIDTH{1'b0}};
+            cfg_coeff_mode_r <= 2'b00;
+            cfg_row_blocks_r <= {IDX_WIDTH{1'b0}};
+            cfg_inner_blocks_r <= {IDX_WIDTH{1'b0}};
+            cfg_col_blocks_r <= {IDX_WIDTH{1'b0}};
         end else begin
             done <= 1'b0;
             case (state)
@@ -125,6 +139,12 @@ module scloudplus_matmul_serial #(
                         a_col_blk <= {IDX_WIDTH{1'b0}};
                         s_col_blk <= {IDX_WIDTH{1'b0}};
                         acc_block <= {B*B*Q_WIDTH{1'b0}};
+                        cfg_b_active_r <= cfg_b_active;
+                        cfg_q_active_r <= cfg_q_active;
+                        cfg_coeff_mode_r <= cfg_coeff_mode;
+                        cfg_row_blocks_r <= cfg_row_blocks;
+                        cfg_inner_blocks_r <= cfg_inner_blocks;
+                        cfg_col_blocks_r <= cfg_col_blocks;
                         state     <= ST_REQ;
                     end
                 end
@@ -136,7 +156,7 @@ module scloudplus_matmul_serial #(
                     end
                 end
                 ST_WAIT: begin
-                    if (blk_in_valid) begin
+                    if (blk_in_valid && blk_in_ready) begin
                         a_block_r <= a_block;
                         s_block_r <= s_block;
                         state     <= ST_ACC;

@@ -19,7 +19,7 @@ The selected terms are summed and the low `q` bits are kept, giving reduction mo
 - `scloudplus_bmm_pe.v`: one parameterized PE for a ternary dot product.
 - `scloudplus_bmm_block.v`: parameterized `b x b` block multiply with `b^2` generated PEs.
 - `scloudplus_block_add.v`: generated element-wise block accumulation modulo `2^q`.
-- `scloudplus_matmul_serial.v`: block scheduler using one block multiplier over `(row, inner, col)` block indices. Incoming `a_block` and `s_block` are latched when `blk_in_valid` is accepted in `ST_WAIT`, so the upstream source may assert `blk_in_valid` for one cycle and change the block buses afterward.
+- `scloudplus_matmul_serial.v`: block scheduler using one block multiplier over `(row, inner, col)` block indices. Incoming `a_block` and `s_block` are latched when `blk_in_valid && blk_in_ready` is accepted in `ST_WAIT`, so the upstream source may assert `blk_in_valid` for one cycle and change the block buses afterward.
 
 ## Runtime Configuration
 
@@ -33,18 +33,24 @@ The main configurable ports are:
   - `2`: 2-bit signed mode, `00 = 0`, `01 = +1`, `10 = -2`, `11 = -1`.
 - `cfg_row_blocks`, `cfg_inner_blocks`, `cfg_col_blocks`: runtime matrix block-grid dimensions for `scloudplus_matmul_serial`.
 
+`scloudplus_matmul_serial` latches all `cfg_*` inputs when `start && start_ready` is accepted. Changes to configuration inputs while `busy=1` do not affect the in-flight matrix multiplication.
+
 ## Integration Notes
 
 The RTL uses packed Verilog-2001 buses rather than unpacked array ports. Element `(row, col)` of a packed `b x b` block is stored at bit slice `(row*B+col)*WIDTH +: WIDTH`.
 
 For the Scloud+ paper default, synthesize with `B=8` and `Q_WIDTH=12`, then set `cfg_b_active=8`, `cfg_q_active=12`, and `cfg_coeff_mode=0`. For a larger reusable instance, increase `B` or `Q_WIDTH` at synthesis time and run smaller tasks by lowering the active configuration.
 
-`ACC_WIDTH` defaults to `Q_WIDTH + 4`, which covers the default `B=8` dot product and gives one extra bit of margin for the `SIGNED2` coefficient mode. For larger synthesis-time `B`, keep:
+`ACC_WIDTH` defaults to `Q_WIDTH`. Because the datapath reduces modulo `2^q` by keeping the low `Q_WIDTH` bits, high accumulator overflow does not change the mathematical result as long as:
 
 ```text
-ACC_WIDTH >= Q_WIDTH + ceil(log2(B)) + 1
+ACC_WIDTH >= Q_WIDTH
 ```
+
+Use a wider `ACC_WIDTH` only when you need to observe the unreduced dot-product sum for debug/statistics, or if the datapath is later changed to a non-power-of-two modulus.
+
+`cfg_b_active=0` disables all active rows/columns and produces zero PE results. `cfg_q_active=0` builds a zero mask and produces zero modulo outputs. Normal Scloud+ operation should use nonzero active values.
 
 The current `scloudplus_bmm_block` is a high-parallelism functional prototype: it instantiates `B*B` PEs and each PE has a generated dot-product accumulation chain. For high-frequency targets, consider a tree/pipelined PE; for low-area targets, reuse fewer PEs serially.
 
-The request interface intentionally accepts a request one cycle after `blk_req_valid` first rises because the valid register is asserted inside `ST_REQ`. Testbenches should therefore wait for `blk_req_valid && blk_req_ready`, then return one cycle of `blk_in_valid` data.
+The request interface intentionally accepts a request one cycle after `blk_req_valid` first rises because the valid register is asserted inside `ST_REQ`. A block source should wait for `blk_req_valid && blk_req_ready`, then wait for `blk_in_ready` and assert `blk_in_valid` with stable block data for one cycle.

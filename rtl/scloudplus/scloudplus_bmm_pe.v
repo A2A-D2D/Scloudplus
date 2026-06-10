@@ -78,7 +78,7 @@ endmodule
 module scloudplus_bmm_pe #(
     parameter B = 8,
     parameter Q_WIDTH = 12,
-    parameter ACC_WIDTH = Q_WIDTH + 4,
+    parameter ACC_WIDTH = Q_WIDTH,
     parameter CFG_WIDTH = 8
 ) (
     input  wire [CFG_WIDTH-1:0] cfg_b_active,

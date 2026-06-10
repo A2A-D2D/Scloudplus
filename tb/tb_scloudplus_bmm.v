@@ -28,6 +28,7 @@ module tb_scloudplus_bmm;
     wire busy;
     wire done;
     wire blk_req_valid;
+    wire blk_in_ready;
     wire [IDX_WIDTH-1:0] a_row_blk;
     wire [IDX_WIDTH-1:0] a_col_blk;
     wire [IDX_WIDTH-1:0] s_col_blk;
@@ -77,6 +78,7 @@ module tb_scloudplus_bmm;
         .a_col_blk(a_col_blk),
         .s_col_blk(s_col_blk),
         .blk_in_valid(blk_in_valid),
+        .blk_in_ready(blk_in_ready),
         .a_block(a_block),
         .s_block(s_block),
         .c_block_valid(c_block_valid),
@@ -98,7 +100,7 @@ module tb_scloudplus_bmm;
                 @(negedge clk);
             end
             blk_req_ready = 1'b1;
-            @(posedge clk);
+            wait (blk_in_ready);
             @(negedge clk);
             blk_in_valid = 1'b1;
             @(negedge clk);
@@ -162,6 +164,10 @@ module tb_scloudplus_bmm;
         start = 1'b1;
         @(negedge clk);
         start = 1'b0;
+        cfg_b_active = 4'd7;
+        cfg_q_active = 4'd1;
+        cfg_coeff_mode = 2'd1;
+        cfg_inner_blocks = 4'd1;
 
         @(negedge clk);
         a_block = {B*B*Q_WIDTH{1'b0}};
