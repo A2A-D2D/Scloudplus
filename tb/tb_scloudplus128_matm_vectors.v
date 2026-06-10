@@ -80,6 +80,16 @@ module tb_scloudplus128_matm_vectors;
 
     always #5 clk = ~clk;
 
+    task drive_req_block;
+        begin
+            @(posedge clk);
+            @(negedge clk);
+            blk_in_valid = 1'b1;
+            @(negedge clk);
+            blk_in_valid = 1'b0;
+        end
+    endtask
+
     initial begin
         clk = 1'b0;
         rst_n = 1'b0;
@@ -146,9 +156,7 @@ module tb_scloudplus128_matm_vectors;
                 if (blk_req_valid) begin
                     {a_block, s_block} = req_mem[req_idx];
                     req_idx = req_idx + 1;
-                    blk_in_valid = 1'b1;
-                    repeat (2) @(negedge clk);
-                    blk_in_valid = 1'b0;
+                    drive_req_block;
                 end else begin
                     @(negedge clk);
                 end

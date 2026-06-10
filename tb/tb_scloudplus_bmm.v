@@ -11,6 +11,7 @@ module tb_scloudplus_bmm;
     reg clk;
     reg rst_n;
     reg start;
+    reg blk_req_ready;
     reg blk_in_valid;
     reg c_block_ready;
     reg [CFG_WIDTH-1:0] cfg_b_active;
@@ -71,7 +72,7 @@ module tb_scloudplus_bmm;
         .busy(busy),
         .done(done),
         .blk_req_valid(blk_req_valid),
-        .blk_req_ready(1'b1),
+        .blk_req_ready(blk_req_ready),
         .a_row_blk(a_row_blk),
         .a_col_blk(a_col_blk),
         .s_col_blk(s_col_blk),
@@ -87,10 +88,31 @@ module tb_scloudplus_bmm;
 
     always #5 clk = ~clk;
 
+    task drive_block_one_cycle;
+        input integer ready_stall_cycles;
+        integer stall_idx;
+        begin
+            wait (blk_req_valid);
+            blk_req_ready = 1'b0;
+            for (stall_idx = 0; stall_idx < ready_stall_cycles; stall_idx = stall_idx + 1) begin
+                @(negedge clk);
+            end
+            blk_req_ready = 1'b1;
+            @(posedge clk);
+            @(negedge clk);
+            blk_in_valid = 1'b1;
+            @(negedge clk);
+            blk_in_valid = 1'b0;
+            a_block = {B*B*Q_WIDTH{1'b1}};
+            s_block = {B*B*2{1'b1}};
+        end
+    endtask
+
     initial begin
         clk = 1'b0;
         rst_n = 1'b0;
         start = 1'b0;
+        blk_req_ready = 1'b1;
         blk_in_valid = 1'b0;
         c_block_ready = 1'b1;
         cfg_b_active = 4'd2;
@@ -141,7 +163,6 @@ module tb_scloudplus_bmm;
         @(negedge clk);
         start = 1'b0;
 
-        wait (blk_req_valid);
         @(negedge clk);
         a_block = {B*B*Q_WIDTH{1'b0}};
         s_block = {B*B*2{1'b0}};
@@ -153,11 +174,8 @@ module tb_scloudplus_bmm;
         s_block[1*2 +: 2] = 2'b00;
         s_block[8*2 +: 2] = 2'b01;
         s_block[9*2 +: 2] = 2'b01;
-        blk_in_valid = 1'b1;
-        repeat (2) @(negedge clk);
-        blk_in_valid = 1'b0;
+        drive_block_one_cycle(2);
 
-        wait (blk_req_valid);
         @(negedge clk);
         a_block = {B*B*Q_WIDTH{1'b0}};
         s_block = {B*B*2{1'b0}};
@@ -169,17 +187,18 @@ module tb_scloudplus_bmm;
         s_block[1*2 +: 2] = 2'b01;
         s_block[8*2 +: 2] = 2'b00;
         s_block[9*2 +: 2] = 2'b10;
-        blk_in_valid = 1'b1;
-        repeat (2) @(negedge clk);
-        blk_in_valid = 1'b0;
+        c_block_ready = 1'b0;
+        drive_block_one_cycle(0);
 
         wait (c_block_valid);
+        repeat (2) @(negedge clk);
         #1;
         if (c_block[0*Q_WIDTH +: Q_WIDTH] !== 4'd14) begin errors = errors + 1; $display("FAIL serial c00"); end
         if (c_block[1*Q_WIDTH +: Q_WIDTH] !== 4'd1) begin errors = errors + 1; $display("FAIL serial c01"); end
         if (c_block[8*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL serial c10"); end
         if (c_block[9*Q_WIDTH +: Q_WIDTH] !== 4'd3) begin errors = errors + 1; $display("FAIL serial c11"); end
         if (c_block[2*Q_WIDTH +: Q_WIDTH] !== 4'd0) begin errors = errors + 1; $display("FAIL serial inactive col"); end
+        c_block_ready = 1'b1;
 
         wait (done);
         if (errors == 0) begin

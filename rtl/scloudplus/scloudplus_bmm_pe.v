@@ -17,6 +17,7 @@ module scloudplus_bmm_term #(
     localparam [1:0] MODE_TERNARY = 2'd0;
     localparam [1:0] MODE_BINARY  = 2'd1;
     localparam [1:0] MODE_SIGNED2 = 2'd2;
+    localparam [CFG_WIDTH-1:0] Q_WIDTH_CFG = Q_WIDTH;
 
     wire [Q_WIDTH:0]   q_one_ext;
     wire [Q_WIDTH:0]   q_mask_ext;
@@ -28,7 +29,7 @@ module scloudplus_bmm_term #(
     reg  [Q_WIDTH-1:0] term_sel;
 
     assign q_one_ext  = {{Q_WIDTH{1'b0}}, 1'b1};
-    assign q_mask_ext = (cfg_q_active >= Q_WIDTH[CFG_WIDTH-1:0]) ? {1'b0, {Q_WIDTH{1'b1}}} :
+    assign q_mask_ext = (cfg_q_active >= Q_WIDTH_CFG) ? {1'b0, {Q_WIDTH{1'b1}}} :
                         ((q_one_ext << cfg_q_active) - {{Q_WIDTH{1'b0}}, 1'b1});
     assign q_mask     = q_mask_ext[Q_WIDTH-1:0];
     assign a_masked   = a_value & q_mask;
@@ -77,7 +78,7 @@ endmodule
 module scloudplus_bmm_pe #(
     parameter B = 8,
     parameter Q_WIDTH = 12,
-    parameter ACC_WIDTH = 16,
+    parameter ACC_WIDTH = Q_WIDTH + 4,
     parameter CFG_WIDTH = 8
 ) (
     input  wire [CFG_WIDTH-1:0] cfg_b_active,
@@ -95,9 +96,10 @@ module scloudplus_bmm_pe #(
     wire [ACC_WIDTH-1:0] sum_stage [0:B];
     wire [Q_WIDTH-1:0]   y_raw;
     genvar lane;
+    localparam [CFG_WIDTH-1:0] Q_WIDTH_CFG = Q_WIDTH;
 
     assign q_one_ext     = {{Q_WIDTH{1'b0}}, 1'b1};
-    assign q_mask_ext    = (cfg_q_active >= Q_WIDTH[CFG_WIDTH-1:0]) ? {1'b0, {Q_WIDTH{1'b1}}} :
+    assign q_mask_ext    = (cfg_q_active >= Q_WIDTH_CFG) ? {1'b0, {Q_WIDTH{1'b1}}} :
                            ((q_one_ext << cfg_q_active) - {{Q_WIDTH{1'b0}}, 1'b1});
     assign q_mask        = q_mask_ext[Q_WIDTH-1:0];
     assign sum_stage[0]  = {ACC_WIDTH{1'b0}};
@@ -110,7 +112,7 @@ module scloudplus_bmm_pe #(
             ) u_term (
                 .cfg_q_active(cfg_q_active),
                 .cfg_coeff_mode(cfg_coeff_mode),
-                .lane_active(lane[CFG_WIDTH-1:0] < cfg_b_active),
+                .lane_active(lane < cfg_b_active),
                 .a_value(a_vec[lane*Q_WIDTH +: Q_WIDTH]),
                 .s_value(s_vec[lane*2 +: 2]),
                 .term_value(term_vec[lane])

@@ -5,7 +5,7 @@
 module scloudplus_bmm_block #(
     parameter B = 8,
     parameter Q_WIDTH = 12,
-    parameter ACC_WIDTH = 16,
+    parameter ACC_WIDTH = Q_WIDTH + 4,
     parameter CFG_WIDTH = 8
 ) (
     input  wire [CFG_WIDTH-1:0]   cfg_b_active,
@@ -34,8 +34,8 @@ module scloudplus_bmm_block #(
                     assign col_vec[lane*2 +: 2]             = s_block[(lane*B+col)*2 +: 2];
                 end
 
-                assign row_active = (row[CFG_WIDTH-1:0] < cfg_b_active);
-                assign col_active = (col[CFG_WIDTH-1:0] < cfg_b_active);
+                assign row_active = (row < cfg_b_active);
+                assign col_active = (col < cfg_b_active);
 
                 scloudplus_bmm_pe #(
                     .B(B),

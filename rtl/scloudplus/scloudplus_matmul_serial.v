@@ -5,7 +5,7 @@
 module scloudplus_matmul_serial #(
     parameter B = 8,
     parameter Q_WIDTH = 12,
-    parameter ACC_WIDTH = 16,
+    parameter ACC_WIDTH = Q_WIDTH + 4,
     parameter IDX_WIDTH = 16,
     parameter CFG_WIDTH = 8
 ) (
@@ -45,6 +45,8 @@ module scloudplus_matmul_serial #(
 
     reg [2:0] state;
     reg [B*B*Q_WIDTH-1:0] acc_block;
+    reg [B*B*Q_WIDTH-1:0] a_block_r;
+    reg [B*B*2-1:0]       s_block_r;
 
     wire [B*B*Q_WIDTH-1:0] product_block;
     wire [B*B*Q_WIDTH-1:0] next_acc_block;
@@ -78,8 +80,8 @@ module scloudplus_matmul_serial #(
         .cfg_b_active(cfg_b_active),
         .cfg_q_active(cfg_q_active),
         .cfg_coeff_mode(cfg_coeff_mode),
-        .a_block(a_block),
-        .s_block(s_block),
+        .a_block(a_block_r),
+        .s_block(s_block_r),
         .c_block(product_block)
     );
 
@@ -108,6 +110,8 @@ module scloudplus_matmul_serial #(
             c_col_blk       <= {IDX_WIDTH{1'b0}};
             c_block         <= {B*B*Q_WIDTH{1'b0}};
             acc_block       <= {B*B*Q_WIDTH{1'b0}};
+            a_block_r       <= {B*B*Q_WIDTH{1'b0}};
+            s_block_r       <= {B*B*2{1'b0}};
         end else begin
             done <= 1'b0;
             case (state)
@@ -133,7 +137,9 @@ module scloudplus_matmul_serial #(
                 end
                 ST_WAIT: begin
                     if (blk_in_valid) begin
-                        state <= ST_ACC;
+                        a_block_r <= a_block;
+                        s_block_r <= s_block;
+                        state     <= ST_ACC;
                     end
                 end
                 ST_ACC: begin

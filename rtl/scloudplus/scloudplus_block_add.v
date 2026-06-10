@@ -17,9 +17,10 @@ module scloudplus_block_add #(
     wire [Q_WIDTH:0]   q_mask_ext;
     wire [Q_WIDTH-1:0] q_mask;
     genvar idx;
+    localparam [CFG_WIDTH-1:0] Q_WIDTH_CFG = Q_WIDTH;
 
     assign q_one_ext  = {{Q_WIDTH{1'b0}}, 1'b1};
-    assign q_mask_ext = (cfg_q_active >= Q_WIDTH[CFG_WIDTH-1:0]) ? {1'b0, {Q_WIDTH{1'b1}}} :
+    assign q_mask_ext = (cfg_q_active >= Q_WIDTH_CFG) ? {1'b0, {Q_WIDTH{1'b1}}} :
                         ((q_one_ext << cfg_q_active) - {{Q_WIDTH{1'b0}}, 1'b1});
     assign q_mask     = q_mask_ext[Q_WIDTH-1:0];
 
