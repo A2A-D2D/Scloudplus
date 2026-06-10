@@ -28,6 +28,8 @@ RTL_FILES = [
 ]
 C_VECTOR_GEN = TB_DIR / "scloudplus_matm_vector_gen.c"
 C_VECTOR_EXE = BUILD_DIR / "scloudplus_matm_vector_gen.exe"
+OPENHITLS_COMPARE_GEN = TB_DIR / "scloudplus_openhitls_matm_compare.c"
+OPENHITLS_COMPARE_EXE = BUILD_DIR / "scloudplus_openhitls_matm_compare.exe"
 
 CASES = {
     "bmm": {
@@ -123,6 +125,10 @@ def regenerate_c_vectors():
     C_VECTOR_EXE.parent.mkdir(parents=True, exist_ok=True)
     run_cmd(["gcc", "-std=c99", "-Wall", "-Wextra", "-O2", "-o", C_VECTOR_EXE, C_VECTOR_GEN], ROOT)
     run_cmd([C_VECTOR_EXE], ROOT)
+    run_cmd(["gcc", "-std=c99", "-Wall", "-Wextra", "-O2", "-o", OPENHITLS_COMPARE_EXE, OPENHITLS_COMPARE_GEN], ROOT)
+    output = run_cmd([OPENHITLS_COMPARE_EXE], ROOT)
+    if "OPENHITLS_C_COMPARE_PASS" not in output:
+        raise RuntimeError("openHiTLS-style C comparison did not pass")
 
 
 def main():

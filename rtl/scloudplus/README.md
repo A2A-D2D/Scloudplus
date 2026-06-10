@@ -33,6 +33,7 @@ The C reference covers the same Scloud+ matrix-multiply roles as the RTL schedul
 - `keygen_as`: `A * S`
 - `enc_c1_transpose`: transposed scheduling for `A' * S'`
 - `dec_c1s`: `C1 * S`
+- `enc_sb_transpose`: transposed scheduling for the openHiTLS `SCLOUDPLUS_SB_E` product `S * B`
 
 The `scloudplus128` vector set uses the paper-style block settings `B=8`, `Q_WIDTH=12`, and a `600`-coefficient inner dimension, split into `75` block columns. This exercises the high-dimensional MatM schedule used by Scloud+ while still keeping the testbench focused on the matrix multiplier submodule.
 
@@ -40,11 +41,13 @@ The `scloudplus128` vector set uses the paper-style block settings `B=8`, `Q_WID
 
 | Set | `(m, n)` | `(mbar, nbar)` | Covered MatM roles |
 | --- | --- | --- | --- |
-| `Scloud+128` | `(600, 600)` | `(8, 8)` | `A*S`, transpose-scheduled encryption product, `C1*S` |
-| `Scloud+192` | `(928, 896)` | `(8, 8)` | `A*S`, transpose-scheduled encryption product, `C1*S` |
-| `Scloud+256` | `(1136, 1120)` | `(12, 11)` | `A*S`, transpose-scheduled encryption product, `C1*S` |
+| `Scloud+128` | `(600, 600)` | `(8, 8)` | `A*S`, transpose-scheduled `S*A`, `C1*S`, transpose-scheduled `S*B` |
+| `Scloud+192` | `(928, 896)` | `(8, 8)` | `A*S`, transpose-scheduled `S*A`, `C1*S`, transpose-scheduled `S*B` |
+| `Scloud+256` | `(1136, 1120)` | `(12, 11)` | `A*S`, transpose-scheduled `S*A`, `C1*S`, transpose-scheduled `S*B` |
 
 For day-to-day simulation speed, the official-parameter regression uses full official inner dimensions (`600`, `896`, `928`, `1120`, `1136`) but only a 16-row output slice for the large keygen/encryption products. The decryption product uses the full `(mbar, nbar)` shape. This still verifies the long block scheduler ranges and, for `Scloud+256`, the non-multiple-of-8 padded boundary blocks caused by `(12, 11)`.
+
+When `--regen-c-vectors` is used, the runner also builds `tb/scloudplus_openhitls_matm_compare.c`. That comparator mirrors the matrix-multiply loops from openHiTLS/PQCP `SCLOUDPLUS_AS_E`, `SCLOUDPLUS_SA_E`, `SCLOUDPLUS_CS`, and `SCLOUDPLUS_SB_E`, then checks the generated `.mem` expected results. A passing run prints `OPENHITLS_C_COMPARE_PASS` before the RTL simulation starts.
 
 Run the complete MatM regression:
 

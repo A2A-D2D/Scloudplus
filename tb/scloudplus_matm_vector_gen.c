@@ -456,6 +456,25 @@ static void fill_official_dec(unsigned int n, unsigned int mbar,
     }
 }
 
+static void fill_official_sb_transpose(unsigned int m, unsigned int mbar,
+                                       unsigned int nbar, unsigned int salt_base)
+{
+    unsigned int r;
+    unsigned int c;
+
+    clear_mats();
+    for (r = 0; r < nbar; r = r + 1u) {
+        for (c = 0; c < m; c = c + 1u) {
+            left_mat[r][c] = make_a12(c, r, salt_base);
+        }
+    }
+    for (r = 0; r < m; r = r + 1u) {
+        for (c = 0; c < mbar; c = c + 1u) {
+            right_mat[r][c] = make_s12(c, r, salt_base + 1u);
+        }
+    }
+}
+
 static void write_official_param_set(const char *dir, const char *prefix,
                                      unsigned int m, unsigned int n,
                                      unsigned int mbar, unsigned int nbar,
@@ -477,6 +496,10 @@ static void write_official_param_set(const char *dir, const char *prefix,
     snprintf(name, sizeof(name), "%s_dec_c1s", prefix);
     fill_official_dec(n, mbar, nbar, salt_base + 20u);
     write_case_files_padded(dir, name, mbar, n, nbar, 12u);
+
+    snprintf(name, sizeof(name), "%s_enc_sb_transpose", prefix);
+    fill_official_sb_transpose(m, mbar, nbar, salt_base + 30u);
+    write_case_files_padded(dir, name, nbar, m, mbar, 12u);
 }
 
 static void fill_enc_transpose_128(void)
