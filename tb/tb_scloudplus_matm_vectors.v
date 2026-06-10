@@ -120,6 +120,9 @@ module tb_scloudplus_matm_vectors;
         run_case_keygen_as;
         run_case_enc_c1_transpose;
         run_case_dec_c1s;
+        run_case_c_keygen_as;
+        run_case_c_enc_c1_transpose;
+        run_case_c_dec_c1s;
 
         if (errors == 0) begin
             $display("TB_PASS scloudplus_matm_vectors");
@@ -201,6 +204,33 @@ module tb_scloudplus_matm_vectors;
             run_common("dec_c1s",
                        "tb/vectors_scloudplus/dec_c1s_req.mem",
                        "tb/vectors_scloudplus/dec_c1s_exp.mem",
+                       4'd1, 4'd2, 4'd1, 2, 1);
+        end
+    endtask
+
+    task run_case_c_keygen_as;
+        begin
+            run_common("c_keygen_as",
+                       "tb/vectors_scloudplus_c/keygen_as_req.mem",
+                       "tb/vectors_scloudplus_c/keygen_as_exp.mem",
+                       4'd2, 4'd2, 4'd1, 4, 2);
+        end
+    endtask
+
+    task run_case_c_enc_c1_transpose;
+        begin
+            run_common("c_enc_c1_transpose",
+                       "tb/vectors_scloudplus_c/enc_c1_transpose_req.mem",
+                       "tb/vectors_scloudplus_c/enc_c1_transpose_exp.mem",
+                       4'd2, 4'd2, 4'd1, 4, 2);
+        end
+    endtask
+
+    task run_case_c_dec_c1s;
+        begin
+            run_common("c_dec_c1s",
+                       "tb/vectors_scloudplus_c/dec_c1s_req.mem",
+                       "tb/vectors_scloudplus_c/dec_c1s_exp.mem",
                        4'd1, 4'd2, 4'd1, 2, 1);
         end
     endtask

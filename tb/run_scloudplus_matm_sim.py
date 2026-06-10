@@ -25,6 +25,8 @@ RTL_FILES = [
     RTL_DIR / "scloudplus_block_add.v",
     RTL_DIR / "scloudplus_matmul_serial.v",
 ]
+C_VECTOR_GEN = TB_DIR / "scloudplus_matm_vector_gen.c"
+C_VECTOR_EXE = BUILD_DIR / "scloudplus_matm_vector_gen.exe"
 
 CASES = {
     "bmm": {
@@ -108,6 +110,13 @@ def open_wave(case_names):
             subprocess.Popen(["gtkwave", str(vcd)], cwd=str(ROOT))
 
 
+def regenerate_c_vectors():
+    require_tool("gcc")
+    C_VECTOR_EXE.parent.mkdir(parents=True, exist_ok=True)
+    run_cmd(["gcc", "-std=c99", "-Wall", "-Wextra", "-O2", "-o", C_VECTOR_EXE, C_VECTOR_GEN], ROOT)
+    run_cmd([C_VECTOR_EXE], ROOT)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Scloud+ MatM simulations and generate VCD waves.")
     parser.add_argument(
@@ -126,10 +135,19 @@ def main():
         action="store_true",
         help="open generated VCD files with GTKWave after simulation",
     )
+    parser.add_argument(
+        "--regen-c-vectors",
+        action="store_true",
+        help="rebuild and run the C reference vector generator before simulation",
+    )
     args = parser.parse_args()
 
     require_tool("iverilog")
     require_tool("vvp")
+
+    if args.regen_c_vectors:
+        print("\n=== regenerate C reference vectors ===")
+        regenerate_c_vectors()
 
     case_names = ["bmm", "matm", "matm128"] if args.case == "all" else [args.case]
     dump_wave = not args.no_wave
