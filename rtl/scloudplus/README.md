@@ -36,10 +36,26 @@ The C reference covers the same Scloud+ matrix-multiply roles as the RTL schedul
 
 The `scloudplus128` vector set uses the paper-style block settings `B=8`, `Q_WIDTH=12`, and a `600`-coefficient inner dimension, split into `75` block columns. This exercises the high-dimensional MatM schedule used by Scloud+ while still keeping the testbench focused on the matrix multiplier submodule.
 
+`tb/tb_scloudplus_official_params_vectors.v` additionally covers all three parameter sets from Table 2 of ePrint 2024/1306:
+
+| Set | `(m, n)` | `(mbar, nbar)` | Covered MatM roles |
+| --- | --- | --- | --- |
+| `Scloud+128` | `(600, 600)` | `(8, 8)` | `A*S`, transpose-scheduled encryption product, `C1*S` |
+| `Scloud+192` | `(928, 896)` | `(8, 8)` | `A*S`, transpose-scheduled encryption product, `C1*S` |
+| `Scloud+256` | `(1136, 1120)` | `(12, 11)` | `A*S`, transpose-scheduled encryption product, `C1*S` |
+
+For day-to-day simulation speed, the official-parameter regression uses full official inner dimensions (`600`, `896`, `928`, `1120`, `1136`) but only a 16-row output slice for the large keygen/encryption products. The decryption product uses the full `(mbar, nbar)` shape. This still verifies the long block scheduler ranges and, for `Scloud+256`, the non-multiple-of-8 padded boundary blocks caused by `(12, 11)`.
+
 Run the complete MatM regression:
 
 ```text
 python tb/run_scloudplus_matm_sim.py --case all
+```
+
+Run only the official-parameter coverage:
+
+```text
+python tb/run_scloudplus_matm_sim.py --case official --regen-c-vectors --no-wave
 ```
 
 Regenerate the C reference vectors before simulation:

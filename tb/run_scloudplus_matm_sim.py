@@ -5,6 +5,7 @@ Examples:
   python tb/run_scloudplus_matm_sim.py
   python tb/run_scloudplus_matm_sim.py --case bmm
   python tb/run_scloudplus_matm_sim.py --case matm128 --open-wave
+  python tb/run_scloudplus_matm_sim.py --case official --regen-c-vectors
 """
 
 import argparse
@@ -48,6 +49,13 @@ CASES = {
         "out": BUILD_DIR / "tb_scloudplus128_matm_vectors.vvp",
         "vcd": ROOT / "tb_scloudplus128_matm_vectors.vcd",
         "pass": "TB_PASS scloudplus128_matm_vectors",
+        "dump_plusarg": True,
+    },
+    "official": {
+        "tb": TB_DIR / "tb_scloudplus_official_params_vectors.v",
+        "out": BUILD_DIR / "tb_scloudplus_official_params_vectors.vvp",
+        "vcd": ROOT / "tb_scloudplus_official_params_vectors.vcd",
+        "pass": "TB_PASS scloudplus_official_params_vectors",
         "dump_plusarg": True,
     },
 }
@@ -121,7 +129,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run Scloud+ MatM simulations and generate VCD waves.")
     parser.add_argument(
         "--case",
-        choices=["all", "bmm", "matm", "matm128"],
+        choices=["all", "bmm", "matm", "matm128", "official"],
         default="all",
         help="simulation case to run",
     )
@@ -149,7 +157,7 @@ def main():
         print("\n=== regenerate C reference vectors ===")
         regenerate_c_vectors()
 
-    case_names = ["bmm", "matm", "matm128"] if args.case == "all" else [args.case]
+    case_names = ["bmm", "matm", "matm128", "official"] if args.case == "all" else [args.case]
     dump_wave = not args.no_wave
 
     for name in case_names:
