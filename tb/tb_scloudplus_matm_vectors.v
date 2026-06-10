@@ -93,6 +93,11 @@ module tb_scloudplus_matm_vectors;
     endtask
 
     initial begin
+        if ($test$plusargs("dump")) begin
+            $dumpfile("tb_scloudplus_matm_vectors.vcd");
+            $dumpvars(0, tb_scloudplus_matm_vectors);
+        end
+
         clk = 1'b0;
         rst_n = 1'b0;
         start = 1'b0;
