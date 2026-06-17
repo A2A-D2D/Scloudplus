@@ -1,0 +1,49 @@
+
+==============================================================================
+  Scloud+ MsgFunc -- Parameter Summary
+==============================================================================
+
+Reference: openHiTLS C model  (rtl/cmodel/scloudplus_util.c)
+           Scloud+ paper        (ePrint 2024/1306)
+           Python SW ref        (tb/scripts/scloud_msgfunc_sw_ref.py)
+
+
+--- Algorithm Constants ---
+
+Parameter           Symbol      C Model     RTL (param)   Description                   
+----------------------------------------------------------------------------------------
+BW Complex Length   k           16          COMPLEX_N=16  BW32: 16 complex = 32 real dims
+Modulus width       log q       12          Q_WIDTH=12    Q = 4096, mask = 0xFFF        
+Label width         tau+logN    tau+4       LABEL_WIDTH=tau+47 (tau=3) or 8 (tau=4)        
+Msg width           mu          calc        MSG_WIDTH=calc(CN*(2*tau)) - (CN*logCN)/2   
+
+--- Security-Level Parameters (matching C PRESET_PARAS) ---
+
+Level     ss    tau   mu    muConut   logq    Msg Bytes   Q Coords    
+----------------------------------------------------------------------
+Scloud+12816    3     64    2         12      16          64          
+Scloud+19224    4     96    2         12      24          64          
+Scloud+25632    3     64    4         12      32          128         
+
+--- Coordinate Bit Allocation (tau=3, COMPLEX_N=16) ---
+
+Coord   WH    re_bits   im_bits   Label Range (re,im)       
+------------------------------------------------------------
+0       0     3         3         [0, 7], [0, 7]            
+1       1     3         2         [0, 7], [0, 3]            
+2       1     3         2         [0, 7], [0, 3]            
+3       2     2         2         [0, 3], [0, 3]            
+4       1     3         2         [0, 7], [0, 3]            
+5       2     2         2         [0, 3], [0, 3]            
+6       2     2         2         [0, 3], [0, 3]            
+7       3     2         1         [0, 3], [0, 1]            
+8       1     3         2         [0, 7], [0, 3]            
+9       2     2         2         [0, 3], [0, 3]            
+10      2     2         2         [0, 3], [0, 3]            
+11      3     2         1         [0, 3], [0, 1]            
+12      2     2         2         [0, 3], [0, 3]            
+13      3     2         1         [0, 3], [0, 1]            
+14      3     2         1         [0, 3], [0, 1]            
+15      4     1         1         [0, 1], [0, 1]            
+
+  Total msg bits = 6 + 4*5 + 6*4 + 4*3 + 1*2 = 64  (matches mu=64)

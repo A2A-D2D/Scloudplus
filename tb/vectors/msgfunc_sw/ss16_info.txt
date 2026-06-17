@@ -1,0 +1,4 @@
+# ss=16 MsgFunc vectors (C-model aligned)
+# num_vectors=32
+# tau=3 logq=12 mu=64 muConut=2
+# msg_bytes=16 n_coords=64

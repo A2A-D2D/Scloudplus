@@ -1,0 +1,4 @@
+# bw32 MsgFunc vectors
+# num_vectors=64
+# complex_n=16 tau=2 q_width=10 msg_width=32
+# n_coords=32

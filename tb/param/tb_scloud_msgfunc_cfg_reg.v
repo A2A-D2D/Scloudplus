@@ -2,26 +2,36 @@
 
 module tb_scloud_msgfunc_cfg_reg;
 
+    localparam Q_WIDTH      = 12;
+    localparam TAU          = 3;
+    localparam MAX_Q_BITS   = 32 * Q_WIDTH;
+    localparam MAX_MSG_BITS = (16*(2*TAU)) - ((16*4)/2);
+
     reg clk;
     reg rst_n;
     reg start;
     reg [1:0] cfg_bw_mode;
-    reg [31:0] msg_in;
-    reg [319:0] noise_q_flat;
+    reg [MAX_MSG_BITS-1:0] msg_in;
+    reg [MAX_Q_BITS-1:0]   noise_q_flat;
 
     wire start_ready;
     wire busy;
     wire valid_out;
     wire [5:0] active_q_coords;
-    wire [5:0] active_msg_bits;
-    wire [319:0] enc_q_flat;
-    wire [319:0] noisy_q_flat;
-    wire [319:0] rounded_q_flat;
-    wire [31:0] msg_out;
+    wire [6:0] active_msg_bits;
+    wire [MAX_Q_BITS-1:0]   enc_q_flat;
+    wire [MAX_Q_BITS-1:0]   noisy_q_flat;
+    wire [MAX_Q_BITS-1:0]   rounded_q_flat;
+    wire [MAX_MSG_BITS-1:0] msg_out;
 
     integer error_count;
 
-    scloud_msgfunc_cfg_reg dut (
+    scloud_msgfunc_cfg_reg #(
+        .Q_WIDTH     (Q_WIDTH),
+        .TAU         (TAU),
+        .MAX_Q_BITS  (MAX_Q_BITS),
+        .MAX_MSG_BITS(MAX_MSG_BITS)
+    ) dut (
         .clk            (clk),
         .rst_n          (rst_n),
         .start          (start),
@@ -43,24 +53,24 @@ module tb_scloud_msgfunc_cfg_reg;
 
     task clear_noise;
         begin
-            noise_q_flat = 320'b0;
+            noise_q_flat = {MAX_Q_BITS{1'b0}};
         end
     endtask
 
     task set_noise;
         input integer coord_idx;
-        input [9:0] noise_tc;
+        input [Q_WIDTH-1:0] noise_tc;
         begin
-            noise_q_flat[(coord_idx*10)+:10] = noise_tc;
+            noise_q_flat[(coord_idx*Q_WIDTH)+:Q_WIDTH] = noise_tc;
         end
     endtask
 
     task run_case;
         input [1:0] mode_value;
-        input [31:0] msg_value;
-        input [31:0] expect_msg;
+        input [MAX_MSG_BITS-1:0] msg_value;
+        input [MAX_MSG_BITS-1:0] expect_msg;
         input [5:0] expect_coords;
-        input [5:0] expect_bits;
+        input [6:0] expect_bits;
         begin
             @(negedge clk);
             cfg_bw_mode = mode_value;
@@ -69,8 +79,8 @@ module tb_scloud_msgfunc_cfg_reg;
             @(negedge clk);
             start = 1'b0;
             cfg_bw_mode = 2'd2;
-            msg_in = 32'hffffffff;
-            noise_q_flat = {320{1'b1}};
+            msg_in = {MAX_MSG_BITS{1'b1}};
+            noise_q_flat = {MAX_Q_BITS{1'b1}};
             wait (valid_out);
             #1;
             if (msg_out !== expect_msg) begin
@@ -97,7 +107,7 @@ module tb_scloud_msgfunc_cfg_reg;
         rst_n = 1'b0;
         start = 1'b0;
         cfg_bw_mode = 2'd0;
-        msg_in = 32'h00000000;
+        msg_in = {MAX_MSG_BITS{1'b0}};
         clear_noise;
         error_count = 0;
 
@@ -106,25 +116,25 @@ module tb_scloud_msgfunc_cfg_reg;
         @(posedge clk);
 
         clear_noise;
-        set_noise(0, 10'd13);
-        set_noise(1, 10'h3f5);
-        set_noise(5, 10'd31);
-        set_noise(7, 10'h3e8);
-        run_case(2'd0, 32'h00000a5c, 32'h00000a5c, 6'd8, 6'd12);
+        set_noise(0, 12'd13);
+        set_noise(1, 12'hff5);
+        set_noise(5, 12'd31);
+        set_noise(7, 12'hfe8);
+        run_case(2'd0, 64'h00000000000abcde, 64'h00000000000abcde, 6'd8, 7'd20);
 
         clear_noise;
-        set_noise(0, 10'd13);
-        set_noise(1, 10'h3f5);
-        set_noise(7, 10'd41);
-        set_noise(15, 10'h3eb);
-        run_case(2'd1, 32'h000abcde, 32'h000abcde, 6'd16, 6'd20);
+        set_noise(0, 12'd13);
+        set_noise(1, 12'hff5);
+        set_noise(7, 12'd41);
+        set_noise(15, 12'hfeb);
+        run_case(2'd1, 64'h0000000abcde1234, 64'h0000000abcde1234, 6'd16, 7'd36);
 
         clear_noise;
-        set_noise(0, 10'd13);
-        set_noise(1, 10'h3f5);
-        set_noise(18, 10'd43);
-        set_noise(31, 10'h3f1);
-        run_case(2'd2, 32'hdeadbeef, 32'hdeadbeef, 6'd32, 6'd32);
+        set_noise(0, 12'd13);
+        set_noise(1, 12'hff5);
+        set_noise(18, 12'd43);
+        set_noise(31, 12'hff1);
+        run_case(2'd2, 64'hdeadbeef12345678, 64'hdeadbeef12345678, 6'd32, 7'd64);
 
         if (error_count == 0) begin
             $display("TB_PASS scloud_msgfunc_cfg_reg");

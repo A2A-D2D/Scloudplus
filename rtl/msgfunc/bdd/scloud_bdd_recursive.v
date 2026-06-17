@@ -2,7 +2,7 @@
 
 module scloud_bdd_phi_mul_pair_q
 #(
-    parameter Q_WIDTH = 10
+    parameter Q_WIDTH = 12
 )
 (
     input  wire [Q_WIDTH-1:0] b_re,
@@ -18,7 +18,7 @@ endmodule
 
 module scloud_bdd_inv_phi_pair_q
 #(
-    parameter Q_WIDTH = 10
+    parameter Q_WIDTH = 12
 )
 (
     input  wire [Q_WIDTH-1:0] d_re,
@@ -43,8 +43,8 @@ endmodule
 
 module scloud_bdd_round_coord_q
 #(
-    parameter Q_WIDTH = 10,
-    parameter TAU     = 2
+    parameter Q_WIDTH = 12,
+    parameter TAU     = 3
 )
 (
     input  wire [Q_WIDTH-1:0] x_q,
@@ -62,24 +62,22 @@ module scloud_bdd_round_coord_q
 
 endmodule
 
-module scloud_bdd_abs_diff_q
+module scloud_bdd_sq_diff_q
 #(
-    parameter Q_WIDTH = 10
+    parameter Q_WIDTH = 12
 )
 (
     input  wire [Q_WIDTH-1:0] cand_q,
     input  wire [Q_WIDTH-1:0] target_q,
-    output wire [Q_WIDTH:0]   abs_diff
+    output wire [(2*Q_WIDTH)+1:0] sq_diff
 );
 
     wire [Q_WIDTH-1:0] diff_q;
-    wire [Q_WIDTH:0]   diff_ext;
+    wire signed [Q_WIDTH:0] diff_ext;
 
     assign diff_q   = cand_q - target_q;
     assign diff_ext = {diff_q[Q_WIDTH-1], diff_q};
-    assign abs_diff = diff_ext[Q_WIDTH] ?
-                      ((~diff_ext) + {{Q_WIDTH{1'b0}}, 1'b1}) :
-                      diff_ext;
+    assign sq_diff  = diff_ext * diff_ext;
 
 endmodule
 
@@ -130,7 +128,7 @@ endmodule
 
 module scloud_bdd_distance_tree
 #(
-    parameter Q_WIDTH = 10,
+    parameter Q_WIDTH = 12,
     parameter COORDS  = 32
 )
 (
@@ -139,27 +137,27 @@ module scloud_bdd_distance_tree
     output wire [31:0]                 distance_out
 );
 
-    localparam ABS_WIDTH = Q_WIDTH + 1;
+    localparam TERM_WIDTH = (2 * Q_WIDTH) + 2;
 
-    wire [(COORDS*ABS_WIDTH)-1:0] abs_flat;
+    wire [(COORDS*TERM_WIDTH)-1:0] sq_flat;
     genvar gi;
 
     generate
-        for (gi = 0; gi < COORDS; gi = gi + 1) begin : gen_abs
-            scloud_bdd_abs_diff_q #(.Q_WIDTH(Q_WIDTH)) u_abs_diff (
+        for (gi = 0; gi < COORDS; gi = gi + 1) begin : gen_sq
+            scloud_bdd_sq_diff_q #(.Q_WIDTH(Q_WIDTH)) u_sq_diff (
                 .cand_q   (cand_flat[(gi*Q_WIDTH)+:Q_WIDTH]),
                 .target_q (target_flat[(gi*Q_WIDTH)+:Q_WIDTH]),
-                .abs_diff (abs_flat[(gi*ABS_WIDTH)+:ABS_WIDTH])
+                .sq_diff  (sq_flat[(gi*TERM_WIDTH)+:TERM_WIDTH])
             );
         end
     endgenerate
 
     scloud_bdd_sum_tree #(
         .TERMS    (COORDS),
-        .IN_WIDTH (ABS_WIDTH),
+        .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
-    ) u_l1_sum_tree (
-        .terms_flat(abs_flat),
+    ) u_l2_sum_tree (
+        .terms_flat(sq_flat),
         .sum_out   (distance_out)
     );
 
@@ -172,9 +170,9 @@ endmodule
 `ifdef KEEP_BDD_DISTANCE_REF
 module scloud_bdd_distance
 #(
-    parameter Q_WIDTH = 10,
+    parameter Q_WIDTH = 12,
     parameter COORDS  = 32,
-    parameter USE_L1  = 1     // 1 = Manhattan (L1) distance, 0 = Euclidean (L2)
+    parameter USE_L1  = 0     // 0 = Euclidean (L2), 1 = legacy Manhattan (L1)
 )
 (
     input  wire [(COORDS*Q_WIDTH)-1:0] cand_flat,
@@ -218,7 +216,7 @@ endmodule
 
 module scloud_bdd_phi_mul_flat
 #(
-    parameter Q_WIDTH  = 10,
+    parameter Q_WIDTH  = 12,
     parameter COMPLEX_N = 16
 )
 (
@@ -242,7 +240,7 @@ endmodule
 
 module scloud_bdd_inv_phi_flat
 #(
-    parameter Q_WIDTH  = 10,
+    parameter Q_WIDTH  = 12,
     parameter COMPLEX_N = 16
 )
 (
@@ -266,8 +264,8 @@ endmodule
 
 module scloud_bdd_recursive
 #(
-    parameter Q_WIDTH   = 10,
-    parameter TAU       = 2,
+    parameter Q_WIDTH   = 12,
+    parameter TAU       = 3,
     parameter COMPLEX_N = 16
 )
 (
@@ -413,7 +411,7 @@ module scloud_bdd_recursive
                 .distance_out (dist_b)
             );
 
-            assign decoded_flat = (dist_a <= dist_b) ? cand_a : cand_b;
+            assign decoded_flat = (dist_a < dist_b) ? cand_a : cand_b;
         end
     endgenerate
 

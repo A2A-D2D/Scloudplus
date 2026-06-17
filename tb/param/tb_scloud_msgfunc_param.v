@@ -2,147 +2,110 @@
 
 module tb_scloud_msgfunc_param;
 
-    localparam Q_WIDTH = 10;
-    localparam TAU     = 2;
+    localparam Q_WIDTH = 12;
 
-    reg  [11:0] msg8_in;
-    reg  [19:0] msg16_in;
-    reg  [31:0] msg32_in;
-    reg  [(8*Q_WIDTH)-1:0]  noise8_flat;
-    reg  [(16*Q_WIDTH)-1:0] noise16_flat;
-    reg  [(32*Q_WIDTH)-1:0] noise32_flat;
+    localparam TAU3          = 3;
+    localparam TAU3_MSG_BITS = 64;
+    localparam TAU3_Q_BITS   = 32 * Q_WIDTH;
 
-    wire [(8*Q_WIDTH)-1:0]  enc8_flat;
-    wire [(16*Q_WIDTH)-1:0] enc16_flat;
-    wire [(32*Q_WIDTH)-1:0] enc32_flat;
-    wire [(8*Q_WIDTH)-1:0]  noisy8_flat;
-    wire [(16*Q_WIDTH)-1:0] noisy16_flat;
-    wire [(32*Q_WIDTH)-1:0] noisy32_flat;
-    wire [(8*Q_WIDTH)-1:0]  rounded8_flat;
-    wire [(16*Q_WIDTH)-1:0] rounded16_flat;
-    wire [(32*Q_WIDTH)-1:0] rounded32_flat;
-    wire [11:0] msg8_out;
-    wire [19:0] msg16_out;
-    wire [31:0] msg32_out;
+    localparam TAU4          = 4;
+    localparam TAU4_MSG_BITS = 96;
+    localparam TAU4_Q_BITS   = 32 * Q_WIDTH;
+
+    reg  [TAU3_MSG_BITS-1:0] msg_tau3_in;
+    reg  [TAU4_MSG_BITS-1:0] msg_tau4_in;
+    reg  [TAU3_Q_BITS-1:0]   noise_tau3_flat;
+    reg  [TAU4_Q_BITS-1:0]   noise_tau4_flat;
+
+    wire [TAU3_Q_BITS-1:0]   enc_tau3_flat;
+    wire [TAU4_Q_BITS-1:0]   enc_tau4_flat;
+    wire [TAU3_Q_BITS-1:0]   noisy_tau3_flat;
+    wire [TAU4_Q_BITS-1:0]   noisy_tau4_flat;
+    wire [TAU3_Q_BITS-1:0]   rounded_tau3_flat;
+    wire [TAU4_Q_BITS-1:0]   rounded_tau4_flat;
+    wire [TAU3_MSG_BITS-1:0] msg_tau3_out;
+    wire [TAU4_MSG_BITS-1:0] msg_tau4_out;
 
     integer error_count;
     integer idx;
 
     scloud_msgfunc_param #(
-        .COMPLEX_N    (4),
-        .LOG_COMPLEX_N(2),
+        .COMPLEX_N    (16),
+        .LOG_COMPLEX_N(4),
         .Q_WIDTH      (Q_WIDTH),
-        .TAU          (TAU),
-        .LABEL_WIDTH  (4),
-        .MSG_WIDTH    (12)
-    ) dut_bw8 (
-        .msg_in        (msg8_in),
-        .noise_q_flat  (noise8_flat),
-        .enc_q_flat    (enc8_flat),
-        .noisy_q_flat  (noisy8_flat),
-        .rounded_q_flat(rounded8_flat),
-        .msg_out       (msg8_out)
-    );
-
-    scloud_msgfunc_param #(
-        .COMPLEX_N    (8),
-        .LOG_COMPLEX_N(3),
-        .Q_WIDTH      (Q_WIDTH),
-        .TAU          (TAU),
-        .LABEL_WIDTH  (5),
-        .MSG_WIDTH    (20)
-    ) dut_bw16 (
-        .msg_in        (msg16_in),
-        .noise_q_flat  (noise16_flat),
-        .enc_q_flat    (enc16_flat),
-        .noisy_q_flat  (noisy16_flat),
-        .rounded_q_flat(rounded16_flat),
-        .msg_out       (msg16_out)
+        .TAU          (TAU3),
+        .LABEL_WIDTH  (TAU3 + 4),
+        .MSG_WIDTH    (TAU3_MSG_BITS)
+    ) dut_tau3 (
+        .msg_in        (msg_tau3_in),
+        .noise_q_flat  (noise_tau3_flat),
+        .enc_q_flat    (enc_tau3_flat),
+        .noisy_q_flat  (noisy_tau3_flat),
+        .rounded_q_flat(rounded_tau3_flat),
+        .msg_out       (msg_tau3_out)
     );
 
     scloud_msgfunc_param #(
         .COMPLEX_N    (16),
         .LOG_COMPLEX_N(4),
         .Q_WIDTH      (Q_WIDTH),
-        .TAU          (TAU),
-        .LABEL_WIDTH  (6),
-        .MSG_WIDTH    (32)
-    ) dut_bw32 (
-        .msg_in        (msg32_in),
-        .noise_q_flat  (noise32_flat),
-        .enc_q_flat    (enc32_flat),
-        .noisy_q_flat  (noisy32_flat),
-        .rounded_q_flat(rounded32_flat),
-        .msg_out       (msg32_out)
+        .TAU          (TAU4),
+        .LABEL_WIDTH  (TAU4 + 4),
+        .MSG_WIDTH    (TAU4_MSG_BITS)
+    ) dut_tau4 (
+        .msg_in        (msg_tau4_in),
+        .noise_q_flat  (noise_tau4_flat),
+        .enc_q_flat    (enc_tau4_flat),
+        .noisy_q_flat  (noisy_tau4_flat),
+        .rounded_q_flat(rounded_tau4_flat),
+        .msg_out       (msg_tau4_out)
     );
-
-    task set_noise8;
-        input integer coord_idx;
-        input [Q_WIDTH-1:0] noise_tc;
-        begin
-            noise8_flat[(coord_idx*Q_WIDTH)+:Q_WIDTH] = noise_tc;
-        end
-    endtask
-
-    task set_noise16;
-        input integer coord_idx;
-        input [Q_WIDTH-1:0] noise_tc;
-        begin
-            noise16_flat[(coord_idx*Q_WIDTH)+:Q_WIDTH] = noise_tc;
-        end
-    endtask
-
-    task set_noise32;
-        input integer coord_idx;
-        input [Q_WIDTH-1:0] noise_tc;
-        begin
-            noise32_flat[(coord_idx*Q_WIDTH)+:Q_WIDTH] = noise_tc;
-        end
-    endtask
 
     task clear_noise;
         begin
-            noise8_flat  = {8*Q_WIDTH{1'b0}};
-            noise16_flat = {16*Q_WIDTH{1'b0}};
-            noise32_flat = {32*Q_WIDTH{1'b0}};
+            noise_tau3_flat = {TAU3_Q_BITS{1'b0}};
+            noise_tau4_flat = {TAU4_Q_BITS{1'b0}};
         end
     endtask
 
-    task check8;
-        input [11:0] msg_value;
+    task set_noise_tau3;
+        input integer coord_idx;
+        input [Q_WIDTH-1:0] noise_tc;
         begin
-            msg8_in = msg_value;
+            noise_tau3_flat[(coord_idx*Q_WIDTH)+:Q_WIDTH] = noise_tc;
+        end
+    endtask
+
+    task set_noise_tau4;
+        input integer coord_idx;
+        input [Q_WIDTH-1:0] noise_tc;
+        begin
+            noise_tau4_flat[(coord_idx*Q_WIDTH)+:Q_WIDTH] = noise_tc;
+        end
+    endtask
+
+    task check_tau3;
+        input [TAU3_MSG_BITS-1:0] msg_value;
+        begin
+            msg_tau3_in = msg_value;
             #1;
-            if (msg8_out !== msg_value) begin
+            if (msg_tau3_out !== msg_value) begin
                 error_count = error_count + 1;
-                $display("FAIL BW8 msg=%h out=%h enc=%h rounded=%h",
-                         msg_value, msg8_out, enc8_flat, rounded8_flat);
+                $display("FAIL tau3 msg=%h out=%h enc=%h rounded=%h",
+                         msg_value, msg_tau3_out, enc_tau3_flat, rounded_tau3_flat);
             end
         end
     endtask
 
-    task check16;
-        input [19:0] msg_value;
+    task check_tau4;
+        input [TAU4_MSG_BITS-1:0] msg_value;
         begin
-            msg16_in = msg_value;
+            msg_tau4_in = msg_value;
             #1;
-            if (msg16_out !== msg_value) begin
+            if (msg_tau4_out !== msg_value) begin
                 error_count = error_count + 1;
-                $display("FAIL BW16 msg=%h out=%h enc=%h rounded=%h",
-                         msg_value, msg16_out, enc16_flat, rounded16_flat);
-            end
-        end
-    endtask
-
-    task check32;
-        input [31:0] msg_value;
-        begin
-            msg32_in = msg_value;
-            #1;
-            if (msg32_out !== msg_value) begin
-                error_count = error_count + 1;
-                $display("FAIL BW32 msg=%h out=%h enc=%h rounded=%h",
-                         msg_value, msg32_out, enc32_flat, rounded32_flat);
+                $display("FAIL tau4 msg=%h out=%h enc=%h rounded=%h",
+                         msg_value, msg_tau4_out, enc_tau4_flat, rounded_tau4_flat);
             end
         end
     endtask
@@ -152,70 +115,56 @@ module tb_scloud_msgfunc_param;
         $dumpvars(0, tb_scloud_msgfunc_param);
 
         error_count = 0;
-        msg8_in = 12'h000;
-        msg16_in = 20'h00000;
-        msg32_in = 32'h00000000;
+        msg_tau3_in = {TAU3_MSG_BITS{1'b0}};
+        msg_tau4_in = {TAU4_MSG_BITS{1'b0}};
         clear_noise;
         #5;
 
-        check8(12'h000);
-        check8(12'h001);
-        check8(12'habc);
-        check8(12'hfff);
+        check_tau3(64'h0000000000000000);
+        check_tau3(64'h0000000000000001);
+        check_tau3(64'h0123456789abcdef);
+        if (enc_tau3_flat !== 384'h200400000600400200a00400c00600200c00e00000800200e00000c00e00800600600400000e00200400a00800000200) begin
+            error_count = error_count + 1;
+            $display("FAIL tau3 C-model encode vector got=%h", enc_tau3_flat);
+        end
+        check_tau3(64'hfedcba9876543210);
+        check_tau3(64'hffffffffffffffff);
 
-        check16(20'h00000);
-        check16(20'h12345);
-        check16(20'habcd0);
-        check16(20'hfffff);
-
-        check32(32'h00000000);
-        check32(32'h00000001);
-        check32(32'h12345678);
-        check32(32'hdeadbeef);
-        check32(32'hffffffff);
-
-        clear_noise;
-        set_noise8(0, 10'd13);
-        set_noise8(1, 10'h3f5);
-        set_noise8(5, 10'd31);
-        set_noise8(7, 10'h3e8);
-        check8(12'h5a3);
-        check8(12'hc71);
+        check_tau4(96'h000000000000000000000000);
+        check_tau4(96'h000000000000000000000001);
+        check_tau4(96'h0123456789abcdeffedcba98);
+        if (enc_tau4_flat !== 384'hc00500800500400300800d00700400b00e00300e00b00e00300200500a00d00e00500600a00300600f00a00d00000100) begin
+            error_count = error_count + 1;
+            $display("FAIL tau4 C-model encode vector got=%h", enc_tau4_flat);
+        end
+        check_tau4(96'hfedcba987654321001234567);
+        check_tau4(96'hffffffffffffffffffffffff);
 
         clear_noise;
-        set_noise16(0, 10'd13);
-        set_noise16(1, 10'h3f5);
-        set_noise16(3, 10'd29);
-        set_noise16(4, 10'h3e1);
-        set_noise16(7, 10'd41);
-        set_noise16(9, 10'h3ef);
-        set_noise16(12, 10'd35);
-        set_noise16(15, 10'h3eb);
-        check16(20'h13579);
-        check16(20'ha5a5a);
+        set_noise_tau3(0,  12'd13);
+        set_noise_tau3(1,  12'hff5);
+        set_noise_tau3(7,  12'd41);
+        set_noise_tau3(15, 12'hfeb);
+        set_noise_tau3(18, 12'd43);
+        set_noise_tau3(31, 12'hff1);
+        check_tau3(64'h13579bdffdb97531);
+        check_tau3(64'ha5a55a5ac3c33c3c);
 
         clear_noise;
-        set_noise32(0, 10'd13);
-        set_noise32(1, 10'h3f5);
-        set_noise32(3, 10'd29);
-        set_noise32(4, 10'h3e1);
-        set_noise32(7, 10'd41);
-        set_noise32(9, 10'h3ef);
-        set_noise32(12, 10'd35);
-        set_noise32(15, 10'h3eb);
-        set_noise32(18, 10'd43);
-        set_noise32(19, 10'h3d3);
-        set_noise32(24, 10'd31);
-        set_noise32(25, 10'h3df);
-        set_noise32(30, 10'd15);
-        set_noise32(31, 10'h3f1);
-        check32(32'h13579bdf);
-        check32(32'ha5a55a5a);
-        check32(32'hc001d00d);
+        set_noise_tau4(0,  12'd13);
+        set_noise_tau4(1,  12'hff5);
+        set_noise_tau4(7,  12'd41);
+        set_noise_tau4(15, 12'hfeb);
+        set_noise_tau4(18, 12'd43);
+        set_noise_tau4(31, 12'hff1);
+        check_tau4(96'h13579bdffdb97531a5a55a5a);
+        check_tau4(96'hc001d00d0123456789abcdef);
 
         clear_noise;
-        for (idx = 0; idx < 32; idx = idx + 1) begin
-            check32((idx * 32'h00110203) ^ {idx[15:0], idx[15:0]});
+        for (idx = 0; idx < 4; idx = idx + 1) begin
+            check_tau3((idx * 64'h0011223344556677) ^ {32'h55aa0000, idx[31:0]});
+            check_tau4((idx * 96'h000102030405060708090a0b) ^
+                       {32'hf00d0000, idx[31:0], 32'h0badcafe});
         end
 
         if (error_count == 0) begin

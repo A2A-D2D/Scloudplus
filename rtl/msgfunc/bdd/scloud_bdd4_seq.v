@@ -8,8 +8,8 @@
  */
 module scloud_bdd4_seq
 #(
-    parameter Q_WIDTH = 10,
-    parameter TAU     = 2
+    parameter Q_WIDTH = 12,
+    parameter TAU     = 3
 )
 (
     input  wire [(4*Q_WIDTH)-1:0] target_flat,
@@ -221,7 +221,7 @@ module scloud_bdd4_seq
                     state <= ST_SELECT;
                 end
                 ST_SELECT: begin
-                    decoded_flat <= (dist_a_w <= dist_b_w) ? cand_a_w : cand_b_w;
+                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
                     state        <= ST_DONE;
                 end
                 ST_DONE: begin

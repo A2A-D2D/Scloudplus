@@ -1,0 +1,27 @@
+
+==============================================================================
+  BDD ROUNDING BOUNDARY TESTS  (tau=3, Delta=512)
+==============================================================================
+
+Tests rounding at and near Delta boundaries.
+C model uses signed Round(); RTL uses (x + Delta/2) & ROUND_MASK.
+Both must produce identical results for unsigned Q-domain inputs.
+
+Input   BDD Output  Expected Round(x) Match   Note                          
+----------------------------------------------------------------------------
+0       0           0                 PASS                                  
+128     0           0                 PASS                                  
+255     0           0                 PASS                                  
+256     512         512               PASS    tie: round up (>= Delta/2)    
+257     512         512               PASS                                  
+384     512         512               PASS                                  
+511     512         512               PASS                                  
+512     512         512               PASS    exact multiple                
+513     512         512               PASS                                  
+640     512         512               PASS                                  
+767     512         512               PASS                                  
+768     1024        1024              PASS    tie: round up                 
+769     1024        1024              PASS                                  
+896     1024        1024              PASS                                  
+1023    1024        1024              PASS                                  
+1024    1024        1024              PASS                                  

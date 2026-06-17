@@ -1,0 +1,16 @@
+
+==============================================================================
+  NOISE SWEEP  (tau=3, Delta=2^(12-3)=512)
+==============================================================================
+
+Monte Carlo simulation: 256 random messages per noise level.
+Measures BDD error-correction capability.
+
+Noise Level       Max Amplitude   Correct/Total   Rate      Expected                
+------------------------------------------------------------------------------------
+Zero              0               256/256         100.0%    100%                    
+Delta/8           64              256/256         100.0%    ~100%                   
+Delta/4           128             256/256         100.0%    ~100%                   
+Delta/2           256             256/256         100.0%    ~90%+ (near correction boundary)
+3*Delta/4         384             190/256         74.2%     ~70-80%                 
+Delta             512             1/256           0.4%      < 10% (beyond guaranteed correction)
