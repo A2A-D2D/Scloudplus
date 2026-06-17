@@ -6,7 +6,7 @@ from pathlib import Path
 B = 8
 Q_WIDTH = 8
 Q_MOD = 1 << Q_WIDTH
-OUT_DIR = Path(__file__).resolve().parent / "vectors_scloudplus"
+OUT_DIR = Path(__file__).resolve().parents[1] / "vectors" / "scloudplus"
 
 
 def mat_a(rows, cols, salt):

@@ -242,8 +242,8 @@ module tb_pqc_matmul_scloud256;
         // 16 rows = 2 blocks, 1120 inner = 140 blocks, ceil(11/8)=2 col blocks
         run_dual_comparison(
             "scloud256_keygen_as",
-            "tb/vectors_scloudplus_official_c/scloudplus256_keygen_as_req.mem",
-            "tb/vectors_scloudplus_official_c/scloudplus256_keygen_as_exp.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_keygen_as_req.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_keygen_as_exp.mem",
             10'd2, 10'd140, 10'd2,  // row, inner, col blocks
             560, 4
         );
@@ -252,8 +252,8 @@ module tb_pqc_matmul_scloud256;
         // === scloud+256 enc_c1_transpose: transposed A' × S' ===
         run_dual_comparison(
             "scloud256_enc_c1_transpose",
-            "tb/vectors_scloudplus_official_c/scloudplus256_enc_c1_transpose_req.mem",
-            "tb/vectors_scloudplus_official_c/scloudplus256_enc_c1_transpose_exp.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_enc_c1_transpose_req.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_enc_c1_transpose_exp.mem",
             10'd2, 10'd142, 10'd2,
             568, 4
         );
@@ -262,8 +262,8 @@ module tb_pqc_matmul_scloud256;
         // === scloud+256 dec_c1s: C1(12×1120) × S(1120×11) ===
         run_dual_comparison(
             "scloud256_dec_c1s",
-            "tb/vectors_scloudplus_official_c/scloudplus256_dec_c1s_req.mem",
-            "tb/vectors_scloudplus_official_c/scloudplus256_dec_c1s_exp.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_dec_c1s_req.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_dec_c1s_exp.mem",
             10'd2, 10'd140, 10'd2,
             560, 4
         );
@@ -272,8 +272,8 @@ module tb_pqc_matmul_scloud256;
         // === scloud+256 enc_sb_transpose: transposed S × B ===
         run_dual_comparison(
             "scloud256_enc_sb_transpose",
-            "tb/vectors_scloudplus_official_c/scloudplus256_enc_sb_transpose_req.mem",
-            "tb/vectors_scloudplus_official_c/scloudplus256_enc_sb_transpose_exp.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_enc_sb_transpose_req.mem",
+            "tb/vectors/scloudplus_official_c/scloudplus256_enc_sb_transpose_exp.mem",
             10'd2, 10'd142, 10'd2,
             568, 4
         );

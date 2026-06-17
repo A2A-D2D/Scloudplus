@@ -117,28 +117,28 @@ module tb_scloudplus128_matm_vectors;
         @(posedge clk);
 
         run_common("keygen_as",
-                   "tb/vectors_scloudplus128/keygen_as_req.mem",
-                   "tb/vectors_scloudplus128/keygen_as_exp.mem",
+                   "tb/vectors/scloudplus128/keygen_as_req.mem",
+                   "tb/vectors/scloudplus128/keygen_as_exp.mem",
                    8'd2, 8'd75, 8'd1, 150, 2);
         run_common("enc_c1_transpose",
-                   "tb/vectors_scloudplus128/enc_c1_transpose_req.mem",
-                   "tb/vectors_scloudplus128/enc_c1_transpose_exp.mem",
+                   "tb/vectors/scloudplus128/enc_c1_transpose_req.mem",
+                   "tb/vectors/scloudplus128/enc_c1_transpose_exp.mem",
                    8'd2, 8'd75, 8'd1, 150, 2);
         run_common("dec_c1s",
-                   "tb/vectors_scloudplus128/dec_c1s_req.mem",
-                   "tb/vectors_scloudplus128/dec_c1s_exp.mem",
+                   "tb/vectors/scloudplus128/dec_c1s_req.mem",
+                   "tb/vectors/scloudplus128/dec_c1s_exp.mem",
                    8'd1, 8'd75, 8'd1, 75, 1);
         run_common("c_keygen_as",
-                   "tb/vectors_scloudplus128_c/keygen_as_req.mem",
-                   "tb/vectors_scloudplus128_c/keygen_as_exp.mem",
+                   "tb/vectors/scloudplus128_c/keygen_as_req.mem",
+                   "tb/vectors/scloudplus128_c/keygen_as_exp.mem",
                    8'd2, 8'd75, 8'd1, 150, 2);
         run_common("c_enc_c1_transpose",
-                   "tb/vectors_scloudplus128_c/enc_c1_transpose_req.mem",
-                   "tb/vectors_scloudplus128_c/enc_c1_transpose_exp.mem",
+                   "tb/vectors/scloudplus128_c/enc_c1_transpose_req.mem",
+                   "tb/vectors/scloudplus128_c/enc_c1_transpose_exp.mem",
                    8'd2, 8'd75, 8'd1, 150, 2);
         run_common("c_dec_c1s",
-                   "tb/vectors_scloudplus128_c/dec_c1s_req.mem",
-                   "tb/vectors_scloudplus128_c/dec_c1s_exp.mem",
+                   "tb/vectors/scloudplus128_c/dec_c1s_req.mem",
+                   "tb/vectors/scloudplus128_c/dec_c1s_exp.mem",
                    8'd1, 8'd75, 8'd1, 75, 1);
 
         if (errors == 0) begin

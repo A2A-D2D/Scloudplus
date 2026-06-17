@@ -3,6 +3,7 @@
 
 # Compiled Verilog simulation executables
 *.vvp
+*.pdf
 
 # Compiled executables
 *.exe
@@ -15,6 +16,9 @@
 # Simulation output logs
 *.log
 *.err
+
+# Documentation
+doc/
 
 # OS files
 .DS_Store

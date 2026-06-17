@@ -7,7 +7,7 @@ B = 8
 Q_WIDTH = 12
 Q_MOD = 1 << Q_WIDTH
 ROW_SLICE = 16
-OUT_DIR = Path(__file__).resolve().parent / "vectors_scloudplus128"
+OUT_DIR = Path(__file__).resolve().parents[1] / "vectors" / "scloudplus128"
 PAD_REQ = 150
 PAD_EXP = 2
 

@@ -61,4 +61,15 @@ Flat q-domain buses are LSB-first:
 coord0.re, coord0.im, coord1.re, coord1.im, ...
 ```
 
-The testbench `tb_scloud_msgfunc_param.v` instantiates BW8, BW16, and BW32 configurations and checks zero-noise plus small-noise round trips.
+The testbench [`tb/param/tb_scloud_msgfunc_param.v`](../../../tb/param/tb_scloud_msgfunc_param.v) instantiates BW8, BW16, and BW32 configurations and checks zero-noise plus small-noise round trips.
+
+## Related Directories
+
+| Directory | Description |
+|-----------|-------------|
+| [`../bw8/`](../bw8/) | BW8 fixed combinational implementation |
+| [`../bw16/`](../bw16/) | BW16 fixed combinational implementation |
+| [`../bw32_combo/`](../bw32_combo/) | BW32 fixed combinational implementation |
+| [`../bw32_seq/`](../bw32_seq/) | BW32 sequential (FSM-pipelined) implementation |
+| [`../bdd/`](../bdd/) | Shared BDD decoder engines (recursive + seq4/8/16/32) |
+| [`../../scloudplus/`](../../scloudplus/) | Scloud+ block matrix multiplier |

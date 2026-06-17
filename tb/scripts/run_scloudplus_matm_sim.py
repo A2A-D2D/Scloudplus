@@ -2,10 +2,10 @@
 """One-command Icarus simulation runner for the Scloud+ MatM RTL.
 
 Examples:
-  python tb/run_scloudplus_matm_sim.py
-  python tb/run_scloudplus_matm_sim.py --case bmm
-  python tb/run_scloudplus_matm_sim.py --case matm128 --open-wave
-  python tb/run_scloudplus_matm_sim.py --case official --regen-c-vectors
+  python tb/scripts/run_scloudplus_matm_sim.py
+  python tb/scripts/run_scloudplus_matm_sim.py --case bmm
+  python tb/scripts/run_scloudplus_matm_sim.py --case matm128 --open-wave
+  python tb/scripts/run_scloudplus_matm_sim.py --case official --regen-c-vectors
 """
 
 import argparse
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 TB_DIR = ROOT / "tb"
 RTL_DIR = ROOT / "rtl" / "scloudplus"
 BUILD_DIR = ROOT / "sim_build" / "scloudplus"
@@ -26,35 +26,35 @@ RTL_FILES = [
     RTL_DIR / "scloudplus_block_add.v",
     RTL_DIR / "scloudplus_matmul_serial.v",
 ]
-C_VECTOR_GEN = TB_DIR / "scloudplus_matm_vector_gen.c"
+C_VECTOR_GEN = TB_DIR / "scripts" / "scloudplus_matm_vector_gen.c"
 C_VECTOR_EXE = BUILD_DIR / "scloudplus_matm_vector_gen.exe"
-OPENHITLS_COMPARE_GEN = TB_DIR / "scloudplus_openhitls_matm_compare.c"
+OPENHITLS_COMPARE_GEN = TB_DIR / "scripts" / "scloudplus_openhitls_matm_compare.c"
 OPENHITLS_COMPARE_EXE = BUILD_DIR / "scloudplus_openhitls_matm_compare.exe"
 
 CASES = {
     "bmm": {
-        "tb": TB_DIR / "tb_scloudplus_bmm.v",
+        "tb": TB_DIR / "matmul" / "tb_scloudplus_bmm.v",
         "out": BUILD_DIR / "tb_scloudplus_bmm.vvp",
         "vcd": ROOT / "tb_scloudplus_bmm.vcd",
         "pass": "TB_PASS scloudplus_bmm",
         "dump_plusarg": False,
     },
     "matm": {
-        "tb": TB_DIR / "tb_scloudplus_matm_vectors.v",
+        "tb": TB_DIR / "matmul" / "tb_scloudplus_matm_vectors.v",
         "out": BUILD_DIR / "tb_scloudplus_matm_vectors.vvp",
         "vcd": ROOT / "tb_scloudplus_matm_vectors.vcd",
         "pass": "TB_PASS scloudplus_matm_vectors",
         "dump_plusarg": True,
     },
     "matm128": {
-        "tb": TB_DIR / "tb_scloudplus128_matm_vectors.v",
+        "tb": TB_DIR / "matmul" / "tb_scloudplus128_matm_vectors.v",
         "out": BUILD_DIR / "tb_scloudplus128_matm_vectors.vvp",
         "vcd": ROOT / "tb_scloudplus128_matm_vectors.vcd",
         "pass": "TB_PASS scloudplus128_matm_vectors",
         "dump_plusarg": True,
     },
     "official": {
-        "tb": TB_DIR / "tb_scloudplus_official_params_vectors.v",
+        "tb": TB_DIR / "matmul" / "tb_scloudplus_official_params_vectors.v",
         "out": BUILD_DIR / "tb_scloudplus_official_params_vectors.vvp",
         "vcd": ROOT / "tb_scloudplus_official_params_vectors.vcd",
         "pass": "TB_PASS scloudplus_official_params_vectors",

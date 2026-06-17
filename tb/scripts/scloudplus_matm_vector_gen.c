@@ -540,35 +540,35 @@ static void fill_dec_128(void)
 
 int main(void)
 {
-    ensure_dir("tb/vectors_scloudplus_c");
-    ensure_dir("tb/vectors_scloudplus128_c");
-    ensure_dir("tb/vectors_scloudplus_official_c");
+    ensure_dir("tb/vectors/scloudplus_c");
+    ensure_dir("tb/vectors/scloudplus128_c");
+    ensure_dir("tb/vectors/scloudplus_official_c");
 
     fill_keygen_8();
-    write_case_files("tb/vectors_scloudplus_c", "keygen_as",
+    write_case_files("tb/vectors/scloudplus_c", "keygen_as",
                      16u, 16u, 8u, 8u, 0u, 0u);
     fill_enc_transpose_8();
-    write_case_files("tb/vectors_scloudplus_c", "enc_c1_transpose",
+    write_case_files("tb/vectors/scloudplus_c", "enc_c1_transpose",
                      16u, 16u, 8u, 8u, 0u, 0u);
     fill_dec_8();
-    write_case_files("tb/vectors_scloudplus_c", "dec_c1s",
+    write_case_files("tb/vectors/scloudplus_c", "dec_c1s",
                      8u, 16u, 8u, 8u, 0u, 0u);
 
     fill_keygen_128();
-    write_case_files("tb/vectors_scloudplus128_c", "keygen_as",
+    write_case_files("tb/vectors/scloudplus128_c", "keygen_as",
                      16u, 600u, 8u, 12u, MAX_REQ_128, MAX_EXP_128);
     fill_enc_transpose_128();
-    write_case_files("tb/vectors_scloudplus128_c", "enc_c1_transpose",
+    write_case_files("tb/vectors/scloudplus128_c", "enc_c1_transpose",
                      16u, 600u, 8u, 12u, MAX_REQ_128, MAX_EXP_128);
     fill_dec_128();
-    write_case_files("tb/vectors_scloudplus128_c", "dec_c1s",
+    write_case_files("tb/vectors/scloudplus128_c", "dec_c1s",
                      8u, 600u, 8u, 12u, MAX_REQ_128, MAX_EXP_128);
 
-    write_official_param_set("tb/vectors_scloudplus_official_c", "scloudplus128",
+    write_official_param_set("tb/vectors/scloudplus_official_c", "scloudplus128",
                              600u, 600u, 8u, 8u, 31u);
-    write_official_param_set("tb/vectors_scloudplus_official_c", "scloudplus192",
+    write_official_param_set("tb/vectors/scloudplus_official_c", "scloudplus192",
                              928u, 896u, 8u, 8u, 61u);
-    write_official_param_set("tb/vectors_scloudplus_official_c", "scloudplus256",
+    write_official_param_set("tb/vectors/scloudplus_official_c", "scloudplus256",
                              1136u, 1120u, 12u, 11u, 91u);
 
     return 0;

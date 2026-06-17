@@ -117,54 +117,54 @@ module tb_scloudplus_official_params_vectors;
         @(posedge clk);
 
         run_common("scloudplus128_keygen_as",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_keygen_as_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_keygen_as_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_keygen_as_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_keygen_as_exp.mem",
                    10'd2, 10'd75, 10'd1, 150, 2);
         run_common("scloudplus128_enc_c1_transpose",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_enc_c1_transpose_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_enc_c1_transpose_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_enc_c1_transpose_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_enc_c1_transpose_exp.mem",
                    10'd2, 10'd75, 10'd1, 150, 2);
         run_common("scloudplus128_dec_c1s",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_dec_c1s_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_dec_c1s_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_dec_c1s_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_dec_c1s_exp.mem",
                    10'd1, 10'd75, 10'd1, 75, 1);
         run_common("scloudplus128_enc_sb_transpose",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_enc_sb_transpose_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus128_enc_sb_transpose_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_enc_sb_transpose_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus128_enc_sb_transpose_exp.mem",
                    10'd1, 10'd75, 10'd1, 75, 1);
 
         run_common("scloudplus192_keygen_as",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_keygen_as_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_keygen_as_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_keygen_as_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_keygen_as_exp.mem",
                    10'd2, 10'd112, 10'd1, 224, 2);
         run_common("scloudplus192_enc_c1_transpose",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_enc_c1_transpose_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_enc_c1_transpose_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_enc_c1_transpose_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_enc_c1_transpose_exp.mem",
                    10'd2, 10'd116, 10'd1, 232, 2);
         run_common("scloudplus192_dec_c1s",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_dec_c1s_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_dec_c1s_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_dec_c1s_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_dec_c1s_exp.mem",
                    10'd1, 10'd112, 10'd1, 112, 1);
         run_common("scloudplus192_enc_sb_transpose",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_enc_sb_transpose_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus192_enc_sb_transpose_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_enc_sb_transpose_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus192_enc_sb_transpose_exp.mem",
                    10'd1, 10'd116, 10'd1, 116, 1);
 
         run_common("scloudplus256_keygen_as",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_keygen_as_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_keygen_as_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_keygen_as_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_keygen_as_exp.mem",
                    10'd2, 10'd140, 10'd2, 560, 4);
         run_common("scloudplus256_enc_c1_transpose",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_enc_c1_transpose_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_enc_c1_transpose_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_enc_c1_transpose_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_enc_c1_transpose_exp.mem",
                    10'd2, 10'd142, 10'd2, 568, 4);
         run_common("scloudplus256_dec_c1s",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_dec_c1s_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_dec_c1s_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_dec_c1s_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_dec_c1s_exp.mem",
                    10'd2, 10'd140, 10'd2, 560, 4);
         run_common("scloudplus256_enc_sb_transpose",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_enc_sb_transpose_req.mem",
-                   "tb/vectors_scloudplus_official_c/scloudplus256_enc_sb_transpose_exp.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_enc_sb_transpose_req.mem",
+                   "tb/vectors/scloudplus_official_c/scloudplus256_enc_sb_transpose_exp.mem",
                    10'd2, 10'd142, 10'd2, 568, 4);
 
         if (errors == 0) begin

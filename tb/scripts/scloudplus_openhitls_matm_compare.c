@@ -240,22 +240,22 @@ static int run_set(const char *prefix, unsigned int m, unsigned int n,
     errors = 0;
     fill_as(16u, n, nbar, salt);
     openhitls_as(16u, n, nbar);
-    snprintf(path, sizeof(path), "tb/vectors_scloudplus_official_c/%s_keygen_as_exp.mem", prefix);
+    snprintf(path, sizeof(path), "tb/vectors/scloudplus_official_c/%s_keygen_as_exp.mem", prefix);
     errors += compare_exp_file("AS_E", path, 16u, nbar);
 
     fill_sa(16u, m, mbar, salt + 10u);
     openhitls_sa_transpose(16u, m, mbar);
-    snprintf(path, sizeof(path), "tb/vectors_scloudplus_official_c/%s_enc_c1_transpose_exp.mem", prefix);
+    snprintf(path, sizeof(path), "tb/vectors/scloudplus_official_c/%s_enc_c1_transpose_exp.mem", prefix);
     errors += compare_exp_file("SA_E transpose", path, 16u, mbar);
 
     fill_as(mbar, n, nbar, salt + 20u);
     openhitls_cs(mbar, n, nbar);
-    snprintf(path, sizeof(path), "tb/vectors_scloudplus_official_c/%s_dec_c1s_exp.mem", prefix);
+    snprintf(path, sizeof(path), "tb/vectors/scloudplus_official_c/%s_dec_c1s_exp.mem", prefix);
     errors += compare_exp_file("CS", path, mbar, nbar);
 
     fill_sa(nbar, m, mbar, salt + 30u);
     openhitls_sb_transpose(nbar, m, mbar);
-    snprintf(path, sizeof(path), "tb/vectors_scloudplus_official_c/%s_enc_sb_transpose_exp.mem", prefix);
+    snprintf(path, sizeof(path), "tb/vectors/scloudplus_official_c/%s_enc_sb_transpose_exp.mem", prefix);
     errors += compare_exp_file("SB_E transpose", path, nbar, mbar);
 
     return errors;

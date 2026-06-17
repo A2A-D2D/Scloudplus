@@ -1,166 +1,97 @@
-# Scloudplus 
+# Scloud+ Hardware Implementation
 
-Verilog-2001 RTL prototype for the Scloud+ matrix-multiplication datapath.
+Verilog-2001 RTL implementation of the Scloud+ post-quantum cryptography scheme, focusing on the Barnes-Wall message function (MsgEnc/MsgDec) and block matrix multiplier (MatM) submodules.
 
-This repository focuses on the block matrix multiplication kernel used in Scloud+ hardware exploration.  The current RTL implements a reusable block-matrix multiplier for operations with ternary, binary, and 2-bit signed coefficients under a power-of-two modulus.  It is intended for research, study, and early hardware evaluation rather than production cryptographic deployment.
+Reference paper: [fast-scloud+.pdf](doc/fast-scloud+.pdf)
 
-## Background
+## Directory Structure
 
-Scloud+ is a post-quantum key encapsulation mechanism (KEM) based on unstructured LWE.  Unlike ring/module lattice schemes such as Kyber/ML-KEM, Scloud+ does not rely on NTT-friendly algebraic structure.  Its dominant hardware workload is therefore matrix/vector or matrix/matrix arithmetic rather than polynomial NTT.
-
-This repository implements the matrix arithmetic core only.  It is not a complete Scloud+ KEM implementation.
-
-## Current status
-
-- Language: Verilog-2001 RTL with Python vector-generation scripts.
-- Main target: block matrix multiplication for Scloud+ style ternary-secret arithmetic.
-- Modulus form: reduction modulo `2^q` by keeping the low `q` bits.
-- Verification: simulation testbenches with generated and checked memory vectors.
-- Security status: not side-channel hardened, not constant-time audited, and not intended for production use.
-
-## Repository layout
-
-```text
-.
-├── README.md
+```
+scloud+
 ├── rtl/
-│   └── scloudplus/
-│       ├── README.md
-│       ├── scloudplus_bmm_pe.v
-│       ├── scloudplus_bmm_block.v
-│       ├── scloudplus_block_add.v
-│       └── scloudplus_matmul_serial.v
-└── tb/
-    ├── scloudplus_matm_vector_gen.py
-    ├── scloudplus128_matm_vector_gen.py
-    ├── tb_scloudplus_bmm.v
-    ├── tb_scloudplus_matm_vectors.v
-    ├── tb_scloudplus128_matm_vectors.v
-    ├── vectors_scloudplus/
-    └── vectors_scloudplus128/
+│   ├── msgfunc/                  # Barnes-Wall message function
+│   │   ├── bw8/                  # BW8  combinational (12-bit msg,  8 q-coords)
+│   │   ├── bw16/                 # BW16 combinational (20-bit msg, 16 q-coords)
+│   │   ├── bw32_combo/           # BW32 combinational (32-bit msg, 32 q-coords)
+│   │   ├── bw32_seq/             # BW32 sequential    (FSM-pipelined)
+│   │   ├── bdd/                  # Shared BDD decoders (recursive + seq4/8/16/32)
+│   │   └── param/                # Parameterized BW8/BW16/BW32 (compile-time config)
+│   └── scloudplus/               # Block matrix multiplier (MatM)
+├── tb/
+│   ├── bw8/                      # BW8 testbenches
+│   ├── bw16/                     # BW16 testbenches
+│   ├── bw32_combo/               # BW32 combinational testbench
+│   ├── bw32_seq/                  # BW32 sequential testbenches (unit + stress)
+│   ├── bdd/                      # BDD decoder testbenches
+│   ├── param/                    # Parameterized MsgFunc testbenches
+│   ├── matmul/                   # Matrix multiplier testbenches
+│   ├── scripts/                  # Python/C build & vector generation scripts
+│   └── vectors/                  # Golden test vectors (.mem)
+├── sim_build/                    # Compiled .vvp binaries
+├── doc/                          # Design documents
+│   ├── fast-scloud+.pdf
+│   └── BDD_OPTIMIZATION_PROPOSAL.md
+└── README.md
 ```
 
-## RTL modules
+## Module Overview
 
-| Module | Description |
-|---|---|
-| `scloudplus_bmm_pe.v` | Processing element for one ternary/binary/signed-2 dot product. It computes `sum_j A[i,j] * S[j,k] mod 2^q`. |
-| `scloudplus_bmm_block.v` | One-cycle `B x B` block multiplier built from `B^2` processing elements. |
-| `scloudplus_block_add.v` | Element-wise block accumulation modulo `2^q`. |
-| `scloudplus_matmul_serial.v` | Serial block scheduler that reuses one block multiplier over `(row, inner, col)` block indices. |
+### Barnes-Wall Message Function (`rtl/msgfunc/`)
 
-## Coefficient modes
+Encodes/decodes messages through Barnes-Wall lattice coordinates with noise addition.
 
-The datapath is controlled by `cfg_coeff_mode`:
+| Variant | Q-Coords | Msg Bits | Style | Directory |
+|---------|----------|----------|-------|-----------|
+| BW8 | 8 | 12 | Combinational | [`rtl/msgfunc/bw8/`](rtl/msgfunc/bw8/) |
+| BW16 | 16 | 20 | Combinational | [`rtl/msgfunc/bw16/`](rtl/msgfunc/bw16/) |
+| BW32 | 32 | 32 | Combinational | [`rtl/msgfunc/bw32_combo/`](rtl/msgfunc/bw32_combo/) |
+| BW32 | 32 | 32 | Sequential (FSM) | [`rtl/msgfunc/bw32_seq/`](rtl/msgfunc/bw32_seq/) |
+| BW8/16/32 | — | — | Parameterized | [`rtl/msgfunc/param/`](rtl/msgfunc/param/) |
 
-| `cfg_coeff_mode` | Mode | Encoding |
-|---:|---|---|
-| `0` | Ternary Scloud+ mode | `00/11 = 0`, `01 = +1`, `10 = -1` |
-| `1` | Binary mode | `s[0] = 1` selects `+A` |
-| `2` | 2-bit signed mode | `00 = 0`, `01 = +1`, `10 = -2`, `11 = -1` |
+All variants share the BDD decoders in [`rtl/msgfunc/bdd/`](rtl/msgfunc/bdd/).
 
-The active block size and modulus width are runtime-configurable through:
+### Block Matrix Multiplier (`rtl/scloudplus/`)
 
-- `cfg_b_active`: active block edge length, up to synthesis parameter `B`.
-- `cfg_q_active`: active modulus width, up to synthesis parameter `Q_WIDTH`.
-- `cfg_row_blocks`, `cfg_inner_blocks`, `cfg_col_blocks`: matrix block-grid dimensions for the serial scheduler.
+Configurable `b × b` block matrix multiplier for ternary Scloud+ matrices. Supports runtime configuration of block size, modulus width, and coefficient mode.
 
-For the Scloud+ default-style block configuration, synthesize with `B=8` and `Q_WIDTH=12`, then set:
+See [`rtl/scloudplus/README.md`](rtl/scloudplus/README.md) for details.
 
-```text
-cfg_b_active  = 8
-cfg_q_active  = 12
-cfg_coeff_mode = 0
-```
+## Quick Start
 
-## Quick simulation
-
-Run the commands from the repository root.  The testbenches use relative paths such as `tb/vectors_scloudplus128/...`, so running from another directory may cause `$readmemh` path errors.
-
-### 1. Small block test
+### Run BW32 Demo Simulation
 
 ```bash
-iverilog -g2001 -o sim_scloudplus_bmm \
-  tb/tb_scloudplus_bmm.v \
-  rtl/scloudplus/scloudplus_bmm_pe.v \
-  rtl/scloudplus/scloudplus_bmm_block.v \
-  rtl/scloudplus/scloudplus_block_add.v \
-  rtl/scloudplus/scloudplus_matmul_serial.v
-
-vvp sim_scloudplus_bmm
+cd sim_build
+vvp tb_scloud_msgfunc_bw32_demo.vvp
 ```
 
-### 2. Generic matrix-vector test vectors
+### Run BW32 Sequential Simulation
 
 ```bash
-python3 tb/scloudplus_matm_vector_gen.py
-
-iverilog -g2001 -o sim_scloudplus_matm_vectors \
-  tb/tb_scloudplus_matm_vectors.v \
-  rtl/scloudplus/scloudplus_bmm_pe.v \
-  rtl/scloudplus/scloudplus_bmm_block.v \
-  rtl/scloudplus/scloudplus_block_add.v \
-  rtl/scloudplus/scloudplus_matmul_serial.v
-
-vvp sim_scloudplus_matm_vectors
+cd sim_build
+vvp tb_scloud_msgfunc_bw32_seq.vvp
 ```
 
-### 3. Scloud+128-sized matrix test vectors
+### Run Full MatM Regression
 
 ```bash
-python3 tb/scloudplus128_matm_vector_gen.py
-
-iverilog -g2001 -o sim_scloudplus128_matm_vectors \
-  tb/tb_scloudplus128_matm_vectors.v \
-  rtl/scloudplus/scloudplus_bmm_pe.v \
-  rtl/scloudplus/scloudplus_bmm_block.v \
-  rtl/scloudplus/scloudplus_block_add.v \
-  rtl/scloudplus/scloudplus_matmul_serial.v
-
-vvp sim_scloudplus128_matm_vectors
+python tb/scripts/run_scloudplus_matm_sim.py --case all
 ```
 
-A successful run should print a `TB_PASS` message from the corresponding testbench.
+## Key Parameters
 
-## Interface notes
+All implementations use fixed `q=1024`, `TAU=2`, `Q_WIDTH=10`.
 
-`scloudplus_matmul_serial` uses a simple request/response block interface:
+| Parameter | BW8 | BW16 | BW32 |
+|-----------|-----|------|------|
+| COMPLEX_N | 4 | 8 | 16 |
+| Q-coordinates | 8 | 16 | 32 |
+| Message width | 12 bits | 20 bits | 32 bits |
+| Label width | 192 bits | 224 bits | 224 bits |
 
-- `start`, `start_ready`, `busy`, `done`: top-level transaction control.
-- `blk_req_valid`, `blk_req_ready`: request handshake for the next pair of input blocks.
-- `a_row_blk`, `a_col_blk`, `s_col_blk`: block indices requested by the scheduler.
-- `blk_in_valid`, `a_block`, `s_block`: input block payload.
-- `c_block_valid`, `c_block_ready`, `c_row_blk`, `c_col_blk`, `c_block`: output block payload.
+## Implementation Notes
 
-Packed block layout:
-
-```text
-block[row][col] -> block[(row * B + col) * WIDTH +: WIDTH]
-```
-
-where `WIDTH = Q_WIDTH` for matrix `A/C` elements and `WIDTH = 2` for the encoded coefficient matrix `S`.
-
-## Design notes
-
-- The PE avoids general-purpose multiplication in ternary mode.  Each coefficient selects `0`, `+A`, or `-A mod 2^q`.
-- Because the modulus is `2^q`, modular reduction is implemented by masking the low `q` bits.
-- Right-multiplication forms such as `S' * A` can be mapped by external transpose scheduling, allowing the same `A * S` block datapath to be reused.
-- The serial scheduler trades throughput for lower area by reusing one `B x B` block multiplier across matrix block indices.
-
-## Suggested next steps
-
-- Add a top-level wrapper with a memory-mapped register interface.
-- Add synthesis scripts for FPGA and ASIC evaluation.
-- Add waveform dumping options to the testbenches.
-- Add CI simulation using Icarus Verilog.
-- Add lint checks for Verilog-2001 compatibility.
-- Add comparison against a full Scloud+ software reference implementation.
-
-## References
-
-- Anyu Wang et al., **Scloud+: a Lightweight LWE-based KEM without Ring/Module Structure**, IACR ePrint 2024/1306.
-- `rtl/scloudplus/README.md` for the local paper-to-RTL mapping notes.
-
-## Disclaimer
-
-This project is a research RTL prototype.  It is not a complete cryptographic library, has not been formally verified, and has not been evaluated for side-channel resistance.
+- **Combinational ("demo")** variants use manually unrolled butterfly stages and explicit msg↔label bit assignments for clarity. They are fully functional but have high combinational depth.
+- **Sequential** variants execute one butterfly stage per clock cycle, significantly reducing area and improving timing.
+- **BDD recursive tree** in the combinational decoder has exponential instance count; the sequential BDD engines avoid this via hierarchical FSM reuse (BDD4 → BDD8 → BDD16 → BDD32).
+- See [`doc/BDD_OPTIMIZATION_PROPOSAL.md`](doc/BDD_OPTIMIZATION_PROPOSAL.md) for optimization plans.
