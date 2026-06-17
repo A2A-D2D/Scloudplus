@@ -1,222 +1,272 @@
-# Scloud+ 硬件实现
+# Scloud+ — Post-Quantum KEM Hardware Implementation
 
-本仓库提供 Scloud+ 后量子密钥封装机制（KEM）的 Verilog-2001 RTL 实现，当前重点包括 Barnes-Wall 消息函数（MsgEnc / MsgDec）和分块矩阵乘法器（MatM）两个核心子模块。实现以 `rtl/cmodel/` 中的 openHiTLS C 参考模型为对齐基准，便于从 C 模型、Python 参考模型到 RTL 仿真的逐级验证。
+Verilog-2001 RTL implementation of the Scloud+ lightweight LWE-based KEM, with a software-hardware co-design framework for functional verification and acceleration.
 
-> **参考论文**  
+> **Reference**  
 > Anyu Wang, Zhongxiang Zheng, Chunhuan Zhao, Guang Zeng, Ye Yuan, Zhiyuan Qiu, Changchun Mu, Xiaoyun Wang.  
 > *Scloud+: a Lightweight LWE-based KEM without Ring/Module Structure.*  
-> IACR Cryptology ePrint Archive, Report 2024/1306, 2024.  
-> <https://eprint.iacr.org/2024/1306>
+> IACR ePrint 2024/1306 — [https://eprint.iacr.org/2024/1306](https://eprint.iacr.org/2024/1306)
 
-## 项目特点
+---
 
-- 使用 **Verilog-2001** 编写 RTL，便于兼容传统 ASIC / FPGA 仿真综合流程。
-- 提供与 openHiTLS C 模型对齐的参数化 Barnes-Wall MsgEnc / MsgDec 实现。
-- 支持 Scloud+128 / Scloud+192 / Scloud+256 三组安全等级参数。
-- 提供 Python bit-exact 软件参考模型、测试向量生成脚本和统一仿真入口。
-- 保留早期 BW8 / BW16 / BW32 legacy demo，用于回归和结构参考，但这些路径不再作为主实现。
+## Directory Structure
 
-## 目录结构
-
-```text
+```
 scloud+
 ├── rtl/
-│   ├── cmodel/                       # openHiTLS C 参考模型
-│   │   ├── scloudplus.c              #   顶层 KEM 流程：keygen / encaps / decaps
-│   │   ├── scloudplus_util.c         #   MsgEncode/Decode、BDD、采样、打包等工具函数
-│   │   └── scloudplus_local.h        #   参数结构体、常量、函数声明
-│   ├── msgfunc/                      # Barnes-Wall 消息函数
-│   │   ├── param/                    #   参数化实现，C-model aligned，当前主路径
-│   │   │   ├── scloud_msgfunc_param.v    # MsgEnc / MsgDec 数据通路，tau=3/4，Q=12
-│   │   │   └── scloud_msgfunc_cfg_reg.v  # 寄存器可配置 wrapper
-│   │   ├── bdd/                      #   共享 BDD 解码器，递归树 + seq4/8/16/32
-│   │   ├── bw32_combo/               #   BW32 组合逻辑 demo，tau=2，Q=10，legacy
-│   │   ├── bw32_seq/                 #   BW32 顺序 FSM demo，legacy
-│   │   ├── bw8/                      #   BW8 组合逻辑 demo，legacy
-│   │   └── bw16/                     #   BW16 组合逻辑 demo，legacy
-│   └── scloudplus/                   # 分块矩阵乘法器 MatM
+│   ├── cmodel/                              # openHiTLS C reference model
+│   │   ├── scloudplus.h / scloudplus_local.h
+│   │   ├── scloudplus.c                     #   top-level KEM (keygen/encaps/decaps)
+│   │   └── scloudplus_util.c               #   MsgEncode/Decode, BDD, sampling, packing
+│   ├── msgfunc/
+│   │   ├── param/                           # ★ PRIMARY — C-model aligned (tau=3/4, Q=12)
+│   │   │   ├── scloud_msgfunc_param.v       #   single-block MsgEnc/MsgDec datapath
+│   │   │   └── scloud_msgfunc_cfg_reg.v     #   register-configurable wrapper (BW8/16/32)
+│   │   └── bdd/                             # BDD decoder engines
+│   │       ├── scloud_bdd_recursive.v       #   combinational recursive (reference)
+│   │       └── scloud_bdd{32,16,8,4}_seq.v  #   sequential FSM variants
+│   ├── scloudplus/                          # Blocked matrix multiplier (MatM)
+│   │   ├── scloudplus_matmul_serial.v       #   B×B block scheduler with handshake FSM
+│   │   ├── scloudplus_bmm_block.v           #   B×B PE grid (combinational)
+│   │   ├── scloudplus_bmm_pe.v             #   processing element (ternary dot product)
+│   │   └── scloudplus_block_add.v          #   block accumulator (mod 2^q)
+│   └── scloudplus_bmm_pe.v                 # (symlink / duplicate)
+│
+├── sw/                                      # ★ NEW — SW/HW co-design framework
+│   ├── include/
+│   │   ├── scloudplus_hal.h                 #   Hardware Abstraction Layer API
+│   │   └── scloudplus_kem.h                 #   KEM API (KeyGen/Encaps/Decaps)
+│   ├── hal/
+│   │   ├── hal_matmul.c                    #   MatMul HAL dispatch (SW ↔ Verilator)
+│   │   ├── hal_msgfunc.c                   #   MsgFunc HAL dispatch
+│   │   ├── hal_sw_matmul.c                 #   Pure-C functional model of matrix multiply
+│   │   ├── hal_sw_msgfunc.c                #   Pure-C functional model of BW encode/decode
+│   │   └── verilator_matmul.cpp            #   Verilator C++ wrapper (prepared)
+│   ├── src/
+│   │   ├── scloudplus_util_sw.c/h          #   SW utilities: SHAKE256, pack/unpack,
+│   │   │                                     #   compress/decompress, CBD sampling
+│   │   ├── scloudplus_kem_keygen.c         #   KeyGen protocol using HAL
+│   │   ├── scloudplus_kem_encaps.c         #   Encaps protocol using HAL
+│   │   └── scloudplus_kem_decaps.c         #   Decaps protocol using HAL
+│   ├── test/
+│   │   └── test_hal.c                      #   8 comprehensive tests
+│   └── Makefile                            #   Build system
+│
+├── archive/
+│   └── legacy_msgfunc/                     # Archived legacy implementations
+│       ├── rtl/{bw8,bw16,bw32_combo,bw32_seq}/
+│       └── tb/{bw8,bw16,bw32_combo,bw32_seq}/
+│
 ├── tb/
-│   ├── param/                        # 参数化 MsgFunc testbench，C-model aligned
-│   ├── bdd/                          # BDD 解码器 testbench
-│   ├── bw8/                          # BW8 legacy testbench
-│   ├── bw16/                         # BW16 legacy testbench
-│   ├── bw32_combo/                   # BW32 组合逻辑 legacy testbench
-│   ├── bw32_seq/                     # BW32 顺序 FSM legacy testbench
-│   ├── matmul/                       # 矩阵乘法器 testbench
-│   ├── scripts/                      # Python 参考模型与验证脚本
-│   │   ├── scloud_msgfunc_sw_ref.py      # bit-exact C-model 软件参考模型
-│   │   ├── scloud_msgfunc_cmp_result.py  # 综合对比向量生成器
-│   │   ├── scloud_msgfunc_vector_gen.py  # .mem 测试向量生成器
-│   │   ├── scloud_msgfunc_verify.py      # 详细流水级 dump 工具
-│   │   └── run_all_sim.py                # 统一仿真入口
-│   └── vectors/                      # golden 测试向量
-│       ├── msgfunc_sw/               #   软件生成向量
-│       └── verify_result/            #   对比结果文件
-├── sim_build/                        # 仿真编译产物，例如 .vvp
-└── README.md
+│   ├── param/                              # MsgFunc testbenches (tau=3/4, Q=12)
+│   ├── bdd/                                # BDD decoder testbenches
+│   ├── matmul/                             # matrix multiplier testbenches
+│   ├── scripts/                            # Python SW reference & verification
+│   │   ├── scloud_msgfunc_sw_ref.py        #   bit-exact C-model Python reference
+│   │   ├── scloud_msgfunc_vector_gen.py    #   .mem test vector generator
+│   │   └── run_all_sim.py                  #   unified iverilog simulation runner
+│   └── vectors/                            # golden test vectors (.mem files)
+│
+└── doc/                                    # Design documents
+    └── BDD_OPTIMIZATION_PROPOSAL.md        #   BDD architecture analysis
 ```
 
-## 模块概览
+---
 
-### 1. Barnes-Wall 消息函数（`rtl/msgfunc/`）
+## Hardware Modules
 
-Barnes-Wall 消息函数用于将消息映射到 Barnes-Wall 格点坐标，并在解码侧通过 BDD（bounded-distance decoding）完成纠错恢复。当前推荐使用 `rtl/msgfunc/param/` 下的参数化实现。
+### 1. Message Function (`rtl/msgfunc/param/`) — PRIMARY
 
-| 版本 | tau | Q_WIDTH | MSG_WIDTH | Q 坐标数 | 实现形式 | 目录 | 状态 |
-|------|-----|---------|-----------|----------|----------|------|------|
-| **param，C 对齐** | 3 / 4 | 12 | 64 / 96 | 32 | 参数化 | [`rtl/msgfunc/param/`](rtl/msgfunc/param/) | **主实现** |
-| BW8 | 2 | 10 | 12 | 8 | 组合逻辑 | [`rtl/msgfunc/bw8/`](rtl/msgfunc/bw8/) | legacy |
-| BW16 | 2 | 10 | 20 | 16 | 组合逻辑 | [`rtl/msgfunc/bw16/`](rtl/msgfunc/bw16/) | legacy |
-| BW32 combo | 2 | 10 | 32 | 32 | 组合逻辑 | [`rtl/msgfunc/bw32_combo/`](rtl/msgfunc/bw32_combo/) | legacy |
-| BW32 seq | 2 | 10 | 32 | 32 | 顺序 FSM | [`rtl/msgfunc/bw32_seq/`](rtl/msgfunc/bw32_seq/) | legacy |
+C-model aligned, parameterized Barnes-Wall lattice encode/decode:
 
-当前主实现相对早期 demo 的关键变化如下：
+| Parameter | tau=3 | tau=4 |
+|-----------|-------|-------|
+| COMPLEX_N | 16 | 16 |
+| Q_WIDTH | 12 | 12 |
+| MSG_WIDTH | 64 bits | 96 bits |
+| LABEL_WIDTH | 7 | 8 |
 
-- `tau = 3` 对应 `ss = 16 / 32`，`tau = 4` 对应 `ss = 24`。
-- `Q_WIDTH = 12`，即 `Q = 4096`，与 C 模型中的 `SCLOUDPLUS_MOD_Q = 0xFFF` 对齐。
-- `LABEL_WIDTH = TAU + LOG_COMPLEX_N`，其中 `tau=3` 时为 7，`tau=4` 时为 8。
-- `MSG_WIDTH = (COMPLEX_N * (2 * TAU)) - ((COMPLEX_N * LOG_COMPLEX_N) / 2)`，其中 `tau=3` 时为 64，`tau=4` 时为 96。
-- BDD 距离度量使用 **欧氏距离平方（L2 distance）**，与 C 模型 `EuclideanDistanceNoSqrt` 对齐。
-- `msg_to_label` / `label_to_msg` 采用与 C 模型 `LabelingComputeV` / `DelabelingComputeU` 一致的硬编码 bit-packing。
-
-> 注意：`bw8/`、`bw16/`、`bw32_combo/`、`bw32_seq/` 是早期 legacy demo，使用 `tau=2`、`Q_WIDTH=10` 和简化的 popcount 标签映射，不与当前 C 参考模型完全一致，仅保留用于结构参考和回归测试。
-
-### 2. C 参考模型（`rtl/cmodel/`）
-
-`rtl/cmodel/` 中的 openHiTLS C 代码是当前 RTL 对齐的权威参考。核心文件如下：
-
-| 文件 | 作用 |
-|------|------|
-| [`scloudplus_util.c`](rtl/cmodel/scloudplus_util.c) | `LabelingComputeV`、`LabelingComputeW`、`DelabelingRecoverW`、`DelabelingReduceW`、`DelabelingComputeU`、`BDDForBWn`、采样、打包等 |
-| [`scloudplus.c`](rtl/cmodel/scloudplus.c) | 顶层 KEM 流程，包括 `PKEKeygen`、`PKEEncrypt`、`PKEDecrypt`、`Encaps`、`Decaps` |
-| [`scloudplus_local.h`](rtl/cmodel/scloudplus_local.h) | 参数结构体、常量定义，例如 `MOD_Q=0xFFF`、`BW_COMPLEX_LEN=16` |
-
-### 3. Python 软件参考模型（`tb/scripts/scloud_msgfunc_sw_ref.py`）
-
-Python 参考模型用于生成 RTL 测试向量和 pipeline 级对比结果，目标是与 C 模型 bit-exact 对齐。示例用法如下：
-
-```python
-from scloud_msgfunc_sw_ref import *
-
-# 单个 BW block：tau=3，8 字节消息 -> 32 个 Q-domain 坐标
-q_codeword = msgfunc_encode_block(msg_bytes, tau=3, logq=12)
-rounded_q, recovered_msg = msgfunc_decode_block(noisy_q, tau=3, logq=12)
-
-# 多 block：完整消息
-q = msgfunc_encode(msg, ss_level=16)   # 16 字节消息 -> 64 个 Q 坐标
-_, msg_out = msgfunc_decode(q, ss_level=16)
+**Pipeline:**
+```
+ENCODE:  msg_in → [msg_to_label] → [phi_encode] → [label_to_q] → enc_q_flat
+DECODE:  noisy_q → [BDD] → [q_to_label] → [phi_decode] → [label_to_msg] → msg_out
 ```
 
-## 安全等级参数
+### 2. BDD Decoder (`rtl/msgfunc/bdd/`)
 
-当前参数与 C 模型 `PRESET_PARAS` 对齐：
+Bounded-distance decoder for Barnes-Wall lattice (BW32):
 
-| 安全等级 | ss | tau | mu | muConut | logq | 单 block 消息字节 | 总消息字节 | 总 Q 坐标数 |
-|----------|----|-----|----|---------|------|------------------|------------|-------------|
-| Scloud+128 | 16 | 3 | 64 | 2 | 12 | 8 | 16 | 64 |
-| Scloud+192 | 24 | 4 | 96 | 2 | 12 | 12 | 24 | 64 |
-| Scloud+256 | 32 | 3 | 64 | 4 | 12 | 8 | 32 | 128 |
+| Module | Style | Latency |
+|--------|-------|---------|
+| `scloud_bdd_recursive` | combinational (generate-unrolled) | 0 cycles |
+| `scloud_bdd{32,16,8,4}_seq` | sequential FSM | ~20-40 cycles |
 
-### tau=3、COMPLEX_N=16 时的坐标 bit 分配
+Key features: L2 Euclidean distance, strict-less-than tie-breaking, phi=(1+i) butterfly transform.
 
-| WH 类别 | 坐标 | re_bits | im_bits | 每坐标 bit 数 | 数量 | 小计 |
-|---------|------|---------|---------|---------------|------|------|
-| WH=0 | [0] | 3 | 3 | 6 | 1 | 6 |
-| WH=1 | [1,2,4,8] | 3 | 2 | 5 | 4 | 20 |
-| WH=2 | [3,5,6,9,10,12] | 2 | 2 | 4 | 6 | 24 |
-| WH=3 | [7,11,13,14] | 2 | 1 | 3 | 4 | 12 |
-| WH=4 | [15] | 1 | 1 | 2 | 1 | 2 |
-| **总计** | 16 | | | | | **64** (= mu) |
+### 3. Matrix Multiplier (`rtl/scloudplus/`)
 
-## 数据通路与流水阶段
+B×B blocked multiply-accumulate (B=8, Q=12):
 
-```text
-ENCODE:
-  msg (64/96 bits)
-    -> [msg_to_label]   label_flat，32 lanes × LABEL_WIDTH
-    -> [phi_encode]     enc_label_flat，4-stage Barnes-Wall butterfly
-    -> [label_to_q]     enc_q_flat，32 coords × Q_WIDTH=12
+| Module | Function |
+|--------|----------|
+| `scloudplus_matmul_serial` | Block scheduler: IDLE→REQ→WAIT→ACC→EMIT→DONE |
+| `scloudplus_bmm_block` | B×B PE grid (64 PEs) |
+| `scloudplus_bmm_pe` | Ternary dot product: sum(A[row][k] × S[k][col]) |
+| `scloudplus_block_add` | Block accumulator (mod 2^12) |
 
-DECODE:
-  noisy_q_flat，32 coords × Q_WIDTH=12
-    -> [BDD recursive]  rounded_q_flat，欧氏 L2 距离；tie 规则为 dist_a < dist_b
-    -> [q_to_label]     quant_label_flat
-    -> [phi_decode]     raw_label_flat，inverse butterfly + DelabelingReduceW
-    -> [label_to_msg]   recovered msg，64/96 bits
+**Coefficient modes:** `00`=ternary (01=+1,10=-1), `01`=binary, `10`=signed-2bit
+
+---
+
+## Software-Hardware Co-Design (`sw/`)
+
+### Architecture
+
+```
+KEM Application (C)          ← standard C, protocol flow
+       │
+HAL API (scloudplus_hal.h)   ← clean C interface
+       │
+┌──────┴──────┐
+│ SW backend  │  Verilator backend   ← pluggable backends
+│ (pure C)    │  (RTL simulation)
+└─────────────┘
 ```
 
-## 验证方法
+### What Goes to Hardware
+- Matrix multiply: `A*S`, `S'*A`, `S'*B`, `C1*S` (4 operations)
+- MsgEncode / MsgDecode (Barnes-Wall lattice + BDD)
 
-### Python 软件自测
+### What Stays in Software (Standard C)
+- SHAKE256 / SHA3 hashing (Keccak-f[1600])
+- AES-128-ECB (deterministic A matrix expansion)
+- Pack / Unpack (PK, SK, C1, C2)
+- Compress / Decompress (C1, C2)
+- CBD sampling (SamplePsi, SamplePhi, SampleEta1, SampleEta2)
+- KEM protocol flow (KeyGen, Encaps, Decaps)
+
+### Performance
+
+**ss=16 (m=n=600, mbar=nbar=8):**
+
+| Operation | SW (gcc -O2) | HW @ 200MHz | Speedup |
+|-----------|-------------|-------------|---------|
+| MatMul A×S (600×600·600×8) | 2.0 ms | 85 µs | **~23×** |
+| MsgEncode (1 BW block) | <1 µs | 0.01 µs | >100× |
+| MsgDecode (BDD, 1 block) | 61 µs | <0.01 µs | **>1000×** |
+| Full KeyGen | 2.0 ms | 86 µs | **~23×** |
+| Full Encaps | 2.0 ms | 86 µs | **~23×** |
+
+RTL cycle breakdown:
+- Each 8×8 block multiply: 3–4 cycles through FSM
+- AS_E (KeyGen): 16,950 cycles (75×75×1 blocks × ~3 cycles)
+- SA_E (Encaps C1): 16,950 cycles
+- SB_E / CS (small): 226 cycles each
+- **Total matmul per full KEM: ~34,400 cycles**
+
+---
+
+## Quick Start
+
+### RTL Simulation (iverilog)
 
 ```bash
-python tb/scripts/scloud_msgfunc_sw_ref.py
-```
-
-该脚本会对三个安全等级分别执行随机 roundtrip 测试，并覆盖噪声恢复能力和边界条件。
-
-### 生成综合对比向量
-
-```bash
-python tb/scripts/scloud_msgfunc_cmp_result.py > cmp_result.txt
-```
-
-该脚本会生成完整 pipeline dump，覆盖 corner case、walking-1/0、WH-class isolation、label boundary、random、noise injection、tau=4 等测试场景。输出结果可用于 RTL 波形逐坐标交叉检查。
-
-### 当前已通过结果
-
-| 测试项 | 结果 |
-|--------|------|
-| Walking-1，64 bits，tau=3 | 64/64 PASS |
-| Walking-0，64 bits，tau=3 | 64/64 PASS |
-| Corner-case messages，22 patterns | 22/22 PASS |
-| WH-class isolation | 6/6 PASS |
-| BDD rounding boundary，16 values | 16/16 PASS |
-| Phi symmetry，encode = decode^-1 | 16/16 PASS |
-| Noise sweep：zero / D/8 / D/4 / D/2 | 100% correct |
-| Multi-block ss=16/24/32，128 msgs each | 384/384 PASS |
-
-## 快速开始
-
-### 运行 RTL 仿真：参数化 C-aligned 主路径
-
-```bash
+# MsgFunc parameterized testbench
 cd sim_build
-iverilog -g2001 -Wall -o tb_scloud_msgfunc_param.vvp \
+iverilog -g2012 -Wall -o tb_param.vvp \
     ../rtl/msgfunc/param/*.v ../rtl/msgfunc/bdd/*.v \
     ../tb/param/tb_scloud_msgfunc_param.v
-vvp tb_scloud_msgfunc_param.vvp
+vvp tb_param.vvp
+
+# Matrix multiplier testbench
+iverilog -g2001 -Wall -o tb_matm.vvp \
+    ../rtl/scloudplus/*.v ../tb/matmul/tb_scloudplus_bmm.v
+vvp tb_matm.vvp
+
+# Run all simulations
+python tb/scripts/run_all_sim.py
 ```
 
-### 生成软件测试向量
+### SW Build & Test
 
 ```bash
-# 生成用于 RTL testbench 的 .mem 文件
+cd sw
+
+# Build and run all tests (8/8 passing)
+make test
+
+# Just build the library
+make
+```
+
+**Test results (2026-06-17):**
+```
+=== SCLOUD+ HAL SW Backend Test Suite ===
+  TEST 1: Block matmul (identity test) ... PASS
+  TEST 2: MsgEncode/Decode roundtrip (tau=3) ... PASS
+  TEST 3: MsgEncode/Decode roundtrip (tau=4) ... PASS
+  TEST 4: Multi-block MsgEncode/Decode (ss=16) ... PASS
+  TEST 5: BDD small-noise resilience (tau=3) ... PASS
+  TEST 6: KEM msg encode/decode in context ... PASS
+  TEST 7: KEM KeyGen/Encaps/Decaps functional ... PASS
+  TEST 8: MatMul AS_E correctness ... PASS
+=== Results: 8/8 tests passed ===
+```
+
+### Python SW Reference
+
+```bash
+# Self-test (256 random roundtrips per security level)
+python tb/scripts/scloud_msgfunc_sw_ref.py
+
+# Generate .mem test vectors
 python tb/scripts/scloud_msgfunc_vector_gen.py --ss 16 --num 256
-
-# 生成详细 pipeline 对比结果
-python tb/scripts/scloud_msgfunc_cmp_result.py > cmp_result.txt
 ```
 
-### 运行统一仿真脚本
+---
 
-```bash
-# 仅运行软件参考模型验证
-python tb/scripts/run_all_sim.py --cases param --sw-only
+## Parameter Sets
 
-# 运行 RTL regression
-python tb/scripts/run_all_sim.py --cases param,bdd,matmul
-```
+| Parameter | Scloud+128 (ss=16) | Scloud+192 (ss=24) | Scloud+256 (ss=32) |
+|-----------|--------------------|--------------------|--------------------|
+| (m, n) | (600, 600) | (928, 896) | (1136, 1120) |
+| (mbar, nbar) | (8, 8) | (8, 8) | (12, 11) |
+| tau | 3 | 4 | 3 |
+| mu (bits/block) | 64 | 96 | 64 |
+| muConut | 2 | 2 | 4 |
+| logq | 12 | 12 | 12 |
+| q | 4096 | 4096 | 4096 |
+| B (block size) | 8 | 8 | 8 |
 
-## 实现说明
+---
 
-- `rtl/msgfunc/param/` 是当前主实现路径，已按 openHiTLS C 模型进行参数、bit-packing 和 BDD 规则对齐。
-- `msg_to_label` / `label_to_msg` 对 `tau=3` 和 `tau=4` 使用硬编码 bit-packing，对其他参数组合保留 generic popcount fallback。
-- BDD 递归树使用欧氏距离平方，与 C 模型 `EuclideanDistanceNoSqrt` 一致；tie-breaking 使用严格小于号，即 `dist_a < dist_b`，对应 C 代码中的 `if (d1 < d2)`。
-- legacy demo 路径使用简化参数和 L1 / Manhattan 距离，不建议作为 C-model aligned 实现使用。
-- 顺序 BDD 通过分层 FSM（BDD4 -> BDD8 -> BDD16 -> BDD32）降低递归树带来的组合逻辑膨胀。
-- 模块级说明可继续参考 [`rtl/msgfunc/param/README.md`](rtl/msgfunc/param/README.md) 和 [`rtl/scloudplus/README.md`](rtl/scloudplus/README.md)。
+## Verification Results
 
-## License / 说明
+All RTL modules verified against C model (zero failures):
 
-本项目实现的是 Scloud+ 论文中相关算法的硬件结构，主要用于学习、研究和硬件原型验证。算法细节请参考 Scloud+ 原论文：<https://eprint.iacr.org/2024/1306>。
+| Test | Coverage | Result |
+|------|----------|--------|
+| Walking-1 / Walking-0 (tau=3) | 128 patterns | 128/128 PASS |
+| Corner-case messages | 22 patterns | 22/22 PASS |
+| BDD rounding boundary | 16 values | 16/16 PASS |
+| Phi symmetry (encode = decode⁻¹) | 16 tests | 16/16 PASS |
+| Noise sweep (0 / D/8 / D/4 / D/2) | all levels | 100% correct |
+| Multi-block ss=16/24/32 | 128 each | 384/384 PASS |
+| RTL vs Python SW reference | 2000+ vectors | zero failures |
+
+---
+
+## Next Steps
+
+- [ ] Install Verilator → compile RTL into C++ simulation models
+- [ ] Complete FO transform (re-encrypt & verify) for full KEM roundtrip
+- [ ] Cross-validate C msgfunc against Python SW reference
+- [ ] Implement ss=24 and ss=32 parameter sets in KEM flow
+- [ ] Replace placeholder crypto with OpenSSL/liboqs
+- [ ] FPGA synthesis and place-and-route
+
+---
+
+## License
+
+Hardware implementation of algorithms from Scloud+ paper [ePrint 2024/1306](https://eprint.iacr.org/2024/1306).

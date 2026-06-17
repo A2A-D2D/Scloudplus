@@ -1,0 +1,20 @@
+====================================================================================================
+Verification Result Summary
+====================================================================================================
+stress_vectors_total=192
+stress_vectors_pass=192
+stress_vectors_fail=0
+detail_vectors_per_param=8
+
+Generated files:
+- 00_params.txt (947 bytes)
+- 01_stress_summary.txt (599 bytes)
+- 02_process_compare_ss16.txt (25177 bytes)
+- 03_process_compare_ss24.txt (25651 bytes)
+- 04_process_compare_ss32.txt (47397 bytes)
+- 05_block_tau3.txt (8685 bytes)
+- 06_block_tau4.txt (8824 bytes)
+- 07_noise_sweep.txt (1260 bytes)
+- 08_rtl_mem_index.txt (737 bytes)
+
+OVERALL=PASS

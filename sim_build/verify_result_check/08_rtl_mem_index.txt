@@ -1,0 +1,11 @@
+====================================================================================================
+RTL .mem Vector Generation Commands
+====================================================================================================
+Use these commands to regenerate $readmemh-compatible vectors with the
+same randomized message/noise philosophy used by this report.
+
+Full official parameter regroup:
+python tb/scripts/scloud_msgfunc_vector_gen.py --ss all --num 64 --suite mixed --seed 2026 --noise-level 15 --output-dir tb/vectors/msgfunc_sw
+
+Deeper walking-bit regroup:
+python tb/scripts/scloud_msgfunc_vector_gen.py --ss all --num 512 --suite exhaustive --seed 2026 --noise-level 15 --output-dir tb/vectors/msgfunc_sw_exhaustive

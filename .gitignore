@@ -3,10 +3,19 @@
 
 # Compiled Verilog simulation executables
 *.vvp
+
+# Documentation PDFs (large binaries)
 *.pdf
 
 # Compiled executables
 *.exe
+*.dll
+*.so
+*.dylib
+
+# Object files
+*.o
+*.obj
 
 # Temporary files
 *.tmp
@@ -17,8 +26,8 @@
 *.log
 *.err
 
-# Documentation
-doc/
+# SW build artifacts
+sw/build/
 
 # OS files
 .DS_Store

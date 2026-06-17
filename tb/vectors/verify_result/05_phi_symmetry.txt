@@ -1,9 +1,0 @@
-
-==============================================================================
-  PHI SYMMETRY: phi_encode -> phi_decode identity
-==============================================================================
-
-Verifies that phi_decode is the exact inverse of phi_encode
-when combined with DelabelingReduceW.
-
-  All 16 phi symmetry tests: PASS

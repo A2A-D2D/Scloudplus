@@ -1,0 +1,5 @@
+# ss=32 MsgFunc vectors (C-model aligned)
+# num_vectors=512
+# suite=mixed seed=409101 noise_level=31
+# tau=3 logq=12 mu=64 muConut=4
+# msg_bytes=32 n_coords=128

@@ -86,67 +86,71 @@ def build_registry() -> dict:
     """
     cases = {}
 
-    # ── BW8 ──
+    # ── Legacy BW8/BW16/BW32 (archived, tau=2/Q=10) ──
     cases["bw8_demo"] = TestbenchCase(
         name="bw8_demo", group="bw8",
-        tb_file="tb/bw8/tb_scloud_msgfunc_bw8_demo.v",
+        tb_file="archive/legacy_msgfunc/tb/bw8/tb_scloud_msgfunc_bw8_demo.v",
         tb_module="tb_scloud_msgfunc_bw8_demo",
-        rtl_globs=_rtl("bw8/*.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw8/*.v"],
         bw_config={"complex_n": 4, "tau": 2, "q_width": 10, "msg_width": 12},
     )
 
-    # ── BW16 ──
     cases["bw16_demo"] = TestbenchCase(
         name="bw16_demo", group="bw16",
-        tb_file="tb/bw16/tb_scloud_msgfunc_bw16_demo.v",
+        tb_file="archive/legacy_msgfunc/tb/bw16/tb_scloud_msgfunc_bw16_demo.v",
         tb_module="tb_scloud_msgfunc_bw16_demo",
-        rtl_globs=_rtl("bw16/*.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw16/*.v"],
         bw_config={"complex_n": 8, "tau": 2, "q_width": 10, "msg_width": 20},
     )
 
-    # ── BW32 Combo ──
     cases["bw32_combo_demo"] = TestbenchCase(
-        name="bw32_combo_demo", group="bw32",
-        tb_file="tb/bw32_combo/tb_scloud_msgfunc_bw32_demo.v",
+        name="bw32_combo_demo", group="bw32_legacy",
+        tb_file="archive/legacy_msgfunc/tb/bw32_combo/tb_scloud_msgfunc_bw32_demo.v",
         tb_module="tb_scloud_msgfunc_bw32_demo",
-        rtl_globs=_rtl("bw32_combo/*.v", "bdd/*.v", "param/*.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw32_combo/*.v",
+                    "rtl/msgfunc/bdd/*.v"],
         timeout_cycles=2000,
         bw_config={"complex_n": 16, "tau": 2, "q_width": 10, "msg_width": 32},
     )
 
-    # ── BW32 Sequential ──
     cases["bw32_seq"] = TestbenchCase(
-        name="bw32_seq", group="bw32",
-        tb_file="tb/bw32_seq/tb_scloud_msgfunc_bw32_seq.v",
+        name="bw32_seq", group="bw32_legacy",
+        tb_file="archive/legacy_msgfunc/tb/bw32_seq/tb_scloud_msgfunc_bw32_seq.v",
         tb_module="tb_scloud_msgfunc_bw32_seq",
-        rtl_globs=_rtl("bw32_combo/*.v", "bw32_seq/*.v", "bdd/*.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw32_combo/*.v",
+                    "archive/legacy_msgfunc/rtl/bw32_seq/*.v",
+                    "rtl/msgfunc/bdd/*.v"],
         timeout_cycles=10000,
         bw_config={"complex_n": 16, "tau": 2, "q_width": 10, "msg_width": 32},
     )
 
     cases["bw32_stress"] = TestbenchCase(
-        name="bw32_stress", group="bw32",
-        tb_file="tb/bw32_seq/tb_scloud_msgfunc_bw32_stress.v",
+        name="bw32_stress", group="bw32_legacy",
+        tb_file="archive/legacy_msgfunc/tb/bw32_seq/tb_scloud_msgfunc_bw32_stress.v",
         tb_module="tb_scloud_msgfunc_bw32_stress",
-        rtl_globs=_rtl("bw32_combo/*.v", "bw32_seq/*.v", "bdd/*.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw32_combo/*.v",
+                    "archive/legacy_msgfunc/rtl/bw32_seq/*.v",
+                    "rtl/msgfunc/bdd/*.v"],
         timeout_cycles=200000,
         bw_config={"complex_n": 16, "tau": 2, "q_width": 10, "msg_width": 32},
     )
 
     cases["msgenc_bw32_seq"] = TestbenchCase(
-        name="msgenc_bw32_seq", group="bw32",
-        tb_file="tb/bw32_seq/tb_scloud_msgenc_bw32_seq.v",
+        name="msgenc_bw32_seq", group="bw32_legacy",
+        tb_file="archive/legacy_msgfunc/tb/bw32_seq/tb_scloud_msgenc_bw32_seq.v",
         tb_module="tb_scloud_msgenc_bw32_seq",
-        rtl_globs=_rtl("bw32_combo/*.v", "bw32_seq/scloud_msgenc_bw32_seq.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw32_combo/*.v",
+                    "archive/legacy_msgfunc/rtl/bw32_seq/scloud_msgenc_bw32_seq.v"],
         timeout_cycles=5000,
     )
 
     cases["msgdec_bw32_seq"] = TestbenchCase(
-        name="msgdec_bw32_seq", group="bw32",
-        tb_file="tb/bw32_seq/tb_scloud_msgdec_bw32_seq.v",
+        name="msgdec_bw32_seq", group="bw32_legacy",
+        tb_file="archive/legacy_msgfunc/tb/bw32_seq/tb_scloud_msgdec_bw32_seq.v",
         tb_module="tb_scloud_msgdec_bw32_seq",
-        rtl_globs=_rtl("bw32_combo/*.v", "bw32_seq/scloud_msgdec_bw32_seq.v",
-                       "bdd/*.v"),
+        rtl_globs=["archive/legacy_msgfunc/rtl/bw32_combo/*.v",
+                    "archive/legacy_msgfunc/rtl/bw32_seq/scloud_msgdec_bw32_seq.v",
+                    "rtl/msgfunc/bdd/*.v"],
         timeout_cycles=5000,
     )
 
@@ -665,8 +669,7 @@ def main():
     # Resolve cases
     if args.official:
         case_names = [
-            "bw32_combo_demo", "bw32_seq", "bw32_stress",
-            "msgenc_bw32_seq", "msgdec_bw32_seq",
+            "param", "cfg_reg",
             "bdd32_seq", "bdd32_seq_smoke", "bdd32_recursive",
             "matmul_official", "matmul_scloud256",
         ]
@@ -692,7 +695,8 @@ def main():
 
     if not case_names:
         print("No cases selected. Use --cases all or specify groups.")
-        print(f"Available groups: bw8, bw16, bw32, bdd, param, matmul")
+        print(f"Available groups: bw8, bw16, bw32_legacy, bdd, param, matmul")
+        print(f"  (bw8/bw16/bw32_legacy are archived legacy tau=2/Q=10 paths)")
         print(f"Available cases: {', '.join(sorted(runner.cases.keys()))}")
         return
 

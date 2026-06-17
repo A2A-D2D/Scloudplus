@@ -1,0 +1,15 @@
+====================================================================================================
+Randomized Stress Summary
+====================================================================================================
+seed=377101
+vectors_per_param=256
+detail_noise_amp=31
+
+ss  tau  muConut  total  pass  fail
+--  ---  -------  -----  ----  ----
+16  3    2        256    256   0    
+24  4    2        256    256   0    
+32  3    4        256    256   0    
+
+Message cases include deterministic edge patterns first, then random messages.
+Noise is random signed per coordinate for every vector.
