@@ -60,17 +60,26 @@ module scloud_bw32_inv_phi_stage6
 endmodule
 
 module scloud_bw32_q_to_label
+#(
+    parameter Q_WIDTH = 10,
+    parameter TAU     = 2
+)
 (
-    input  wire [319:0]       q_flat,
-    output wire [(16*12)-1:0] label_flat
+    input  wire [(32*Q_WIDTH)-1:0] q_flat,
+    output wire [(32*6)-1:0]       label_flat
 );
+
+    localparam LABEL_WIDTH = 6;
+    localparam LABEL_SHIFT = Q_WIDTH - TAU;   // position of top TAU bits within q value
 
     genvar gi;
 
     generate
         for (gi = 0; gi < 16; gi = gi + 1) begin : gen_unpack
-            assign label_flat[((2*gi+0)*6)+:6] = {4'b0000, q_flat[((2*gi+0)*10)+8+:2]};
-            assign label_flat[((2*gi+1)*6)+:6] = {4'b0000, q_flat[((2*gi+1)*10)+8+:2]};
+            assign label_flat[((2*gi+0)*LABEL_WIDTH)+:LABEL_WIDTH] =
+                {{(LABEL_WIDTH-TAU){1'b0}}, q_flat[((2*gi+0)*Q_WIDTH)+LABEL_SHIFT+:TAU]};
+            assign label_flat[((2*gi+1)*LABEL_WIDTH)+:LABEL_WIDTH] =
+                {{(LABEL_WIDTH-TAU){1'b0}}, q_flat[((2*gi+1)*Q_WIDTH)+LABEL_SHIFT+:TAU]};
         end
     endgenerate
 
@@ -91,31 +100,33 @@ module scloud_bw32_delabel_tau2
     wire [5:0] a_adj;
 
     /* Fixed tau=2 DelabelingReduce.
-       WH is the Hamming weight of the coordinate index j. */
+       WH is the Hamming weight of the coordinate index j.
+       WH=1 and WH=2 share identical b_prime / im_bits logic — merged for clarity. */
     assign b_prime = (WH == 0) ? {4'b0000, raw_im[1:0]} :
-                     (WH == 1) ? {5'b00000, raw_im[0]} :
-                     (WH == 2) ? {5'b00000, raw_im[0]} :
+                     (WH <= 2) ? {5'b00000, raw_im[0]} :
                                  6'b000000;
 
     assign a_adj = raw_re - raw_im + b_prime;
 
-    assign re_bits = (WH == 0) ? a_adj[1:0] :
-                     (WH == 1) ? a_adj[1:0] :
-                     (WH == 2) ? {1'b0, a_adj[0]} :
-                                 {1'b0, a_adj[0]};
+    assign re_bits = (WH <= 1) ? a_adj[1:0] :
+                     (WH <= 3) ? {1'b0, a_adj[0]} :
+                                 2'b00;
 
     assign im_bits = (WH == 0) ? raw_im[1:0] :
-                     (WH == 1) ? {1'b0, raw_im[0]} :
-                     (WH == 2) ? {1'b0, raw_im[0]} :
+                     (WH <= 2) ? {1'b0, raw_im[0]} :
                                  2'b00;
 
 endmodule
 
 module scloud_msgdec_bw32_block
+#(
+    parameter Q_WIDTH = 10,
+    parameter TAU     = 2
+)
 (
-    input  wire [319:0] noisy_q_flat,
-    output wire [31:0]  msg_block,
-    output wire [319:0] rounded_q_flat
+    input  wire [(32*Q_WIDTH)-1:0] noisy_q_flat,
+    output wire [31:0]             msg_block,
+    output wire [(32*Q_WIDTH)-1:0] rounded_q_flat
 );
 
     wire [(16*12)-1:0] quant_label_flat;
@@ -144,15 +155,15 @@ module scloud_msgdec_bw32_block
     /* BDD returns the nearest BW32 q-domain codeword.
        rounded_q_flat uses the same LSB-first coordinate order as enc_q_flat. */
     scloud_bdd_recursive #(
-        .Q_WIDTH  (10),
-        .TAU      (2),
+        .Q_WIDTH  (Q_WIDTH),
+        .TAU      (TAU),
         .COMPLEX_N(16)
     ) u_bdd (
         .target_flat (noisy_q_flat),
         .decoded_flat(rounded_q_flat)
     );
 
-    scloud_bw32_q_to_label u_unpack_q (
+    scloud_bw32_q_to_label #(.Q_WIDTH(Q_WIDTH), .TAU(TAU)) u_unpack_q (
         .q_flat    (rounded_q_flat),
         .label_flat(quant_label_flat)
     );

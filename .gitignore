@@ -1,3 +1,21 @@
-sim_build/
-*.vvp
+# Waveform dump files
 *.vcd
+
+# Compiled Verilog simulation executables
+*.vvp
+
+# Compiled executables
+*.exe
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Simulation output logs
+*.log
+*.err
+
+# OS files
+.DS_Store
+Thumbs.db

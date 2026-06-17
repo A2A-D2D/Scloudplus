@@ -51,26 +51,39 @@ module scloud_bw32_phi_stage6
 endmodule
 
 module scloud_bw32_label_to_q
+#(
+    parameter Q_WIDTH = 10,
+    parameter TAU     = 2
+)
 (
-    input  wire [(16*12)-1:0] label_flat,
-    output wire [319:0]       q_flat
+    input  wire [(32*6)-1:0]       label_flat,
+    output wire [(32*Q_WIDTH)-1:0] q_flat
 );
+
+    localparam LABEL_WIDTH = 6;
+    localparam Q_PAD       = Q_WIDTH - TAU;   // zero-padding width for q-domain LSBs
 
     genvar gi;
 
     generate
         for (gi = 0; gi < 16; gi = gi + 1) begin : gen_pack
-            assign q_flat[((2*gi+0)*10)+:10] = {label_flat[((2*gi+0)*6)+:2], 8'b00000000};
-            assign q_flat[((2*gi+1)*10)+:10] = {label_flat[((2*gi+1)*6)+:2], 8'b00000000};
+            assign q_flat[((2*gi+0)*Q_WIDTH)+:Q_WIDTH] =
+                {label_flat[((2*gi+0)*LABEL_WIDTH)+:TAU], {Q_PAD{1'b0}}};
+            assign q_flat[((2*gi+1)*Q_WIDTH)+:Q_WIDTH] =
+                {label_flat[((2*gi+1)*LABEL_WIDTH)+:TAU], {Q_PAD{1'b0}}};
         end
     endgenerate
 
 endmodule
 
 module scloud_msgenc_bw32_block
+#(
+    parameter Q_WIDTH = 10,
+    parameter TAU     = 2
+)
 (
-    input  wire [31:0] msg_block,
-    output wire [319:0] code_q_flat
+    input  wire [31:0]                msg_block,
+    output wire [(32*Q_WIDTH)-1:0]    code_q_flat
 );
 
     wire [(16*12)-1:0] label0_flat;
@@ -155,7 +168,7 @@ module scloud_msgenc_bw32_block
         .label_out_flat(stage8_flat)
     );
 
-    scloud_bw32_label_to_q u_pack_q (
+    scloud_bw32_label_to_q #(.Q_WIDTH(Q_WIDTH), .TAU(TAU)) u_pack_q (
         .label_flat(stage8_flat),
         .q_flat    (code_q_flat)
     );
