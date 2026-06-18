@@ -1,0 +1,961 @@
+`timescale 1ns/1ps
+
+/*
+ * Runtime-tau sequential BDD nodes for the RCE wrapper.
+ *
+ * These modules keep one physical BDD datapath and select tau=3/tau=4
+ * rounding at run time.  The topology mirrors the existing fixed-tau
+ * scloud_bdd{32,16,8,4}_seq modules so latency stays close to the current
+ * implementation while avoiding duplicate tau3/tau4 BDD instances.
+ */
+
+module scloud_bdd_round_coord_q_rt
+#(
+    parameter Q_WIDTH = 12
+)
+(
+    input  wire               tau_sel,
+    input  wire [Q_WIDTH-1:0] x_q,
+    output wire [Q_WIDTH-1:0] y_q
+);
+
+    localparam [Q_WIDTH-1:0] HALF_DELTA_TAU3 =
+        {{(Q_WIDTH-1){1'b0}}, 1'b1} << ((Q_WIDTH - 3) - 1);
+    localparam [Q_WIDTH-1:0] HALF_DELTA_TAU4 =
+        {{(Q_WIDTH-1){1'b0}}, 1'b1} << ((Q_WIDTH - 4) - 1);
+    localparam [Q_WIDTH-1:0] ROUND_MASK_TAU3 =
+        {{3{1'b1}}, {(Q_WIDTH-3){1'b0}}};
+    localparam [Q_WIDTH-1:0] ROUND_MASK_TAU4 =
+        {{4{1'b1}}, {(Q_WIDTH-4){1'b0}}};
+
+    wire [Q_WIDTH:0] sum_tau3;
+    wire [Q_WIDTH:0] sum_tau4;
+    wire [Q_WIDTH-1:0] round_tau3;
+    wire [Q_WIDTH-1:0] round_tau4;
+
+    assign sum_tau3 = {1'b0, x_q} + {1'b0, HALF_DELTA_TAU3};
+    assign sum_tau4 = {1'b0, x_q} + {1'b0, HALF_DELTA_TAU4};
+    assign round_tau3 = sum_tau3[Q_WIDTH-1:0] & ROUND_MASK_TAU3;
+    assign round_tau4 = sum_tau4[Q_WIDTH-1:0] & ROUND_MASK_TAU4;
+    assign y_q = tau_sel ? round_tau4 : round_tau3;
+
+endmodule
+
+module scloud_bdd4_seq_rt
+#(
+    parameter Q_WIDTH = 12
+)
+(
+    input  wire [(4*Q_WIDTH)-1:0] target_flat,
+    input  wire                   tau_sel,
+    input  wire                   clk,
+    input  wire                   rst_n,
+    input  wire                   start,
+    output wire                   start_ready,
+    output reg                    busy,
+    output reg                    done,
+    output reg  [(4*Q_WIDTH)-1:0] decoded_flat
+);
+
+    localparam COMPLEX_N    = 2;
+    localparam HALF_COMPLEX = COMPLEX_N / 2;
+    localparam HALF_COORDS  = COMPLEX_N;
+    localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
+    localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
+
+    localparam [2:0] ST_IDLE    = 3'd0;
+    localparam [2:0] ST_BDD_Y   = 3'd1;
+    localparam [2:0] ST_INV_PHI = 3'd2;
+    localparam [2:0] ST_BDD_Z   = 3'd3;
+    localparam [2:0] ST_SELECT  = 3'd4;
+    localparam [2:0] ST_DONE    = 3'd5;
+
+    reg [2:0] state;
+    reg tau_sel_r;
+
+    reg [TOTAL_WIDTH-1:0] target_r;
+    reg [HALF_WIDTH-1:0]  target_l_r;
+    reg [HALF_WIDTH-1:0]  target_r_r;
+    reg [HALF_WIDTH-1:0]  y_l_r;
+    reg [HALF_WIDTH-1:0]  y_r_r;
+    reg [HALF_WIDTH-1:0]  z_a_in_r;
+    reg [HALF_WIDTH-1:0]  z_b_in_r;
+    reg [HALF_WIDTH-1:0]  z_a_r;
+    reg [HALF_WIDTH-1:0]  z_b_r;
+
+    wire [HALF_WIDTH-1:0] y_l_w;
+    wire [HALF_WIDTH-1:0] y_r_w;
+    wire [HALF_WIDTH-1:0] diff_a_w;
+    wire [HALF_WIDTH-1:0] diff_b_w;
+    wire [HALF_WIDTH-1:0] z_a_in_w;
+    wire [HALF_WIDTH-1:0] z_b_in_w;
+    wire [HALF_WIDTH-1:0] z_a_w;
+    wire [HALF_WIDTH-1:0] z_b_w;
+    wire [HALF_WIDTH-1:0] phi_z_a_w;
+    wire [HALF_WIDTH-1:0] phi_z_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [31:0] dist_a_w;
+    wire [31:0] dist_b_w;
+
+    genvar gi;
+
+    assign start_ready = (state == ST_IDLE);
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_l_re (
+        .tau_sel(tau_sel_r),
+        .x_q(target_l_r[(0*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(y_l_w[(0*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_l_im (
+        .tau_sel(tau_sel_r),
+        .x_q(target_l_r[(1*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(y_l_w[(1*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_r_re (
+        .tau_sel(tau_sel_r),
+        .x_q(target_r_r[(0*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(y_r_w[(0*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_r_im (
+        .tau_sel(tau_sel_r),
+        .x_q(target_r_r[(1*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(y_r_w[(1*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
+            assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_inv_phi_flat #(
+        .Q_WIDTH  (Q_WIDTH),
+        .COMPLEX_N(HALF_COMPLEX)
+    ) u_inv_phi_a (
+        .d_flat(diff_a_w),
+        .b_flat(z_a_in_w)
+    );
+
+    scloud_bdd_inv_phi_flat #(
+        .Q_WIDTH  (Q_WIDTH),
+        .COMPLEX_N(HALF_COMPLEX)
+    ) u_inv_phi_b (
+        .d_flat(diff_b_w),
+        .b_flat(z_b_in_w)
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_za_re (
+        .tau_sel(tau_sel_r),
+        .x_q(z_a_in_r[(0*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(z_a_w[(0*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_za_im (
+        .tau_sel(tau_sel_r),
+        .x_q(z_a_in_r[(1*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(z_a_w[(1*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_zb_re (
+        .tau_sel(tau_sel_r),
+        .x_q(z_b_in_r[(0*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(z_b_w[(0*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_zb_im (
+        .tau_sel(tau_sel_r),
+        .x_q(z_b_in_r[(1*Q_WIDTH)+:Q_WIDTH]),
+        .y_q(z_b_w[(1*Q_WIDTH)+:Q_WIDTH])
+    );
+
+    scloud_bdd_phi_mul_flat #(
+        .Q_WIDTH  (Q_WIDTH),
+        .COMPLEX_N(HALF_COMPLEX)
+    ) u_phi_za (
+        .b_flat(z_a_r),
+        .y_flat(phi_z_a_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(
+        .Q_WIDTH  (Q_WIDTH),
+        .COMPLEX_N(HALF_COMPLEX)
+    ) u_phi_zb (
+        .b_flat(z_b_r),
+        .y_flat(phi_z_b_w)
+    );
+
+    assign cand_a_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_b_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_candidates
+            assign cand_a_w[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_l_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_a_w[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign cand_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_r_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_b_w[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_distance_tree #(
+        .Q_WIDTH(Q_WIDTH),
+        .COORDS (2*COMPLEX_N)
+    ) u_dist_a (
+        .cand_flat   (cand_a_w),
+        .target_flat (target_r),
+        .distance_out(dist_a_w)
+    );
+
+    scloud_bdd_distance_tree #(
+        .Q_WIDTH(Q_WIDTH),
+        .COORDS (2*COMPLEX_N)
+    ) u_dist_b (
+        .cand_flat   (cand_b_w),
+        .target_flat (target_r),
+        .distance_out(dist_b_w)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state        <= ST_IDLE;
+            tau_sel_r    <= 1'b0;
+            target_r     <= {TOTAL_WIDTH{1'b0}};
+            target_l_r   <= {HALF_WIDTH{1'b0}};
+            target_r_r   <= {HALF_WIDTH{1'b0}};
+            y_l_r        <= {HALF_WIDTH{1'b0}};
+            y_r_r        <= {HALF_WIDTH{1'b0}};
+            z_a_in_r     <= {HALF_WIDTH{1'b0}};
+            z_b_in_r     <= {HALF_WIDTH{1'b0}};
+            z_a_r        <= {HALF_WIDTH{1'b0}};
+            z_b_r        <= {HALF_WIDTH{1'b0}};
+            decoded_flat <= {TOTAL_WIDTH{1'b0}};
+            busy         <= 1'b0;
+            done         <= 1'b0;
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start) begin
+                        tau_sel_r  <= tau_sel;
+                        target_r   <= target_flat;
+                        target_l_r <= target_flat[0+:HALF_WIDTH];
+                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
+                        busy       <= 1'b1;
+                        state      <= ST_BDD_Y;
+                    end
+                end
+                ST_BDD_Y: begin
+                    y_l_r <= y_l_w;
+                    y_r_r <= y_r_w;
+                    state <= ST_INV_PHI;
+                end
+                ST_INV_PHI: begin
+                    z_a_in_r <= z_a_in_w;
+                    z_b_in_r <= z_b_in_w;
+                    state    <= ST_BDD_Z;
+                end
+                ST_BDD_Z: begin
+                    z_a_r <= z_a_w;
+                    z_b_r <= z_b_w;
+                    state <= ST_SELECT;
+                end
+                ST_SELECT: begin
+                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
+                    state        <= ST_DONE;
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule
+
+module scloud_bdd8_seq_rt
+#(
+    parameter Q_WIDTH = 12
+)
+(
+    input  wire [(8*Q_WIDTH)-1:0] target_flat,
+    input  wire                   tau_sel,
+    input  wire                   clk,
+    input  wire                   rst_n,
+    input  wire                   start,
+    output wire                   start_ready,
+    output reg                    busy,
+    output reg                    done,
+    output reg  [(8*Q_WIDTH)-1:0] decoded_flat
+);
+
+    localparam COMPLEX_N    = 4;
+    localparam HALF_COMPLEX = COMPLEX_N / 2;
+    localparam HALF_COORDS  = COMPLEX_N;
+    localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
+    localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
+
+    localparam [2:0] ST_IDLE    = 3'd0;
+    localparam [2:0] ST_WAIT_Y  = 3'd1;
+    localparam [2:0] ST_INV_PHI = 3'd2;
+    localparam [2:0] ST_START_Z = 3'd3;
+    localparam [2:0] ST_WAIT_Z  = 3'd4;
+    localparam [2:0] ST_SELECT  = 3'd5;
+    localparam [2:0] ST_DONE    = 3'd6;
+
+    reg [2:0] state;
+    reg tau_sel_r;
+
+    reg [TOTAL_WIDTH-1:0] target_r;
+    reg [HALF_WIDTH-1:0]  target_l_r;
+    reg [HALF_WIDTH-1:0]  target_r_r;
+    reg [HALF_WIDTH-1:0]  y_l_r;
+    reg [HALF_WIDTH-1:0]  y_r_r;
+    reg [HALF_WIDTH-1:0]  z_a_in_r;
+    reg [HALF_WIDTH-1:0]  z_b_in_r;
+    reg [HALF_WIDTH-1:0]  z_a_r;
+    reg [HALF_WIDTH-1:0]  z_b_r;
+
+    wire child_start;
+    wire child_a_ready;
+    wire child_b_ready;
+    wire child_a_done;
+    wire child_b_done;
+    wire [HALF_WIDTH-1:0] child_a_target;
+    wire [HALF_WIDTH-1:0] child_b_target;
+    wire [HALF_WIDTH-1:0] child_a_decoded;
+    wire [HALF_WIDTH-1:0] child_b_decoded;
+    wire [HALF_WIDTH-1:0] diff_a_w;
+    wire [HALF_WIDTH-1:0] diff_b_w;
+    wire [HALF_WIDTH-1:0] z_a_in_w;
+    wire [HALF_WIDTH-1:0] z_b_in_w;
+    wire [HALF_WIDTH-1:0] phi_z_a_w;
+    wire [HALF_WIDTH-1:0] phi_z_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [31:0] dist_a_w;
+    wire [31:0] dist_b_w;
+    wire child_tau_sel;
+
+    genvar gi;
+
+    assign start_ready = (state == ST_IDLE) && child_a_ready && child_b_ready;
+    assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
+    assign child_start = ((state == ST_IDLE) && start_ready && start) ||
+                         (state == ST_START_Z);
+    assign child_a_target = (state == ST_IDLE) ? target_flat[0+:HALF_WIDTH] :
+                                                z_a_in_r;
+    assign child_b_target = (state == ST_IDLE) ? target_flat[HALF_WIDTH+:HALF_WIDTH] :
+                                                z_b_in_r;
+
+    scloud_bdd4_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_a (
+        .target_flat (child_a_target),
+        .tau_sel     (child_tau_sel),
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .start       (child_start),
+        .start_ready (child_a_ready),
+        .busy        (),
+        .done        (child_a_done),
+        .decoded_flat(child_a_decoded)
+    );
+
+    scloud_bdd4_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_b (
+        .target_flat (child_b_target),
+        .tau_sel     (child_tau_sel),
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .start       (child_start),
+        .start_ready (child_b_ready),
+        .busy        (),
+        .done        (child_b_done),
+        .decoded_flat(child_b_decoded)
+    );
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
+            assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_a (
+        .d_flat(diff_a_w),
+        .b_flat(z_a_in_w)
+    );
+
+    scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_b (
+        .d_flat(diff_b_w),
+        .b_flat(z_b_in_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_phi_za (
+        .b_flat(z_a_r),
+        .y_flat(phi_z_a_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_phi_zb (
+        .b_flat(z_b_r),
+        .y_flat(phi_z_b_w)
+    );
+
+    assign cand_a_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_b_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_candidates
+            assign cand_a_w[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_l_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_a_w[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign cand_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_r_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_b_w[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_a (
+        .cand_flat   (cand_a_w),
+        .target_flat (target_r),
+        .distance_out(dist_a_w)
+    );
+
+    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_b (
+        .cand_flat   (cand_b_w),
+        .target_flat (target_r),
+        .distance_out(dist_b_w)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state        <= ST_IDLE;
+            tau_sel_r    <= 1'b0;
+            target_r     <= {TOTAL_WIDTH{1'b0}};
+            target_l_r   <= {HALF_WIDTH{1'b0}};
+            target_r_r   <= {HALF_WIDTH{1'b0}};
+            y_l_r        <= {HALF_WIDTH{1'b0}};
+            y_r_r        <= {HALF_WIDTH{1'b0}};
+            z_a_in_r     <= {HALF_WIDTH{1'b0}};
+            z_b_in_r     <= {HALF_WIDTH{1'b0}};
+            z_a_r        <= {HALF_WIDTH{1'b0}};
+            z_b_r        <= {HALF_WIDTH{1'b0}};
+            decoded_flat <= {TOTAL_WIDTH{1'b0}};
+            busy         <= 1'b0;
+            done         <= 1'b0;
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start_ready && start) begin
+                        tau_sel_r  <= tau_sel;
+                        target_r   <= target_flat;
+                        target_l_r <= target_flat[0+:HALF_WIDTH];
+                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
+                        busy       <= 1'b1;
+                        state      <= ST_WAIT_Y;
+                    end
+                end
+                ST_WAIT_Y: begin
+                    busy <= 1'b1;
+                    if (child_a_done && child_b_done) begin
+                        y_l_r <= child_a_decoded;
+                        y_r_r <= child_b_decoded;
+                        state <= ST_INV_PHI;
+                    end
+                end
+                ST_INV_PHI: begin
+                    z_a_in_r <= z_a_in_w;
+                    z_b_in_r <= z_b_in_w;
+                    state    <= ST_START_Z;
+                end
+                ST_START_Z: begin
+                    state <= ST_WAIT_Z;
+                end
+                ST_WAIT_Z: begin
+                    busy <= 1'b1;
+                    if (child_a_done && child_b_done) begin
+                        z_a_r <= child_a_decoded;
+                        z_b_r <= child_b_decoded;
+                        state <= ST_SELECT;
+                    end
+                end
+                ST_SELECT: begin
+                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
+                    state        <= ST_DONE;
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule
+
+module scloud_bdd16_seq_rt
+#(
+    parameter Q_WIDTH = 12
+)
+(
+    input  wire [(16*Q_WIDTH)-1:0] target_flat,
+    input  wire                    tau_sel,
+    input  wire                    clk,
+    input  wire                    rst_n,
+    input  wire                    start,
+    output wire                    start_ready,
+    output reg                     busy,
+    output reg                     done,
+    output reg  [(16*Q_WIDTH)-1:0] decoded_flat
+);
+
+    localparam COMPLEX_N    = 8;
+    localparam HALF_COMPLEX = COMPLEX_N / 2;
+    localparam HALF_COORDS  = COMPLEX_N;
+    localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
+    localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
+
+    localparam [2:0] ST_IDLE    = 3'd0;
+    localparam [2:0] ST_WAIT_Y  = 3'd1;
+    localparam [2:0] ST_INV_PHI = 3'd2;
+    localparam [2:0] ST_START_Z = 3'd3;
+    localparam [2:0] ST_WAIT_Z  = 3'd4;
+    localparam [2:0] ST_SELECT  = 3'd5;
+    localparam [2:0] ST_DONE    = 3'd6;
+
+    reg [2:0] state;
+    reg tau_sel_r;
+
+    reg [TOTAL_WIDTH-1:0] target_r;
+    reg [HALF_WIDTH-1:0]  target_l_r;
+    reg [HALF_WIDTH-1:0]  target_r_r;
+    reg [HALF_WIDTH-1:0]  y_l_r;
+    reg [HALF_WIDTH-1:0]  y_r_r;
+    reg [HALF_WIDTH-1:0]  z_a_in_r;
+    reg [HALF_WIDTH-1:0]  z_b_in_r;
+    reg [HALF_WIDTH-1:0]  z_a_r;
+    reg [HALF_WIDTH-1:0]  z_b_r;
+
+    wire child_start;
+    wire child_a_ready;
+    wire child_b_ready;
+    wire child_a_done;
+    wire child_b_done;
+    wire [HALF_WIDTH-1:0] child_a_target;
+    wire [HALF_WIDTH-1:0] child_b_target;
+    wire [HALF_WIDTH-1:0] child_a_decoded;
+    wire [HALF_WIDTH-1:0] child_b_decoded;
+    wire [HALF_WIDTH-1:0] diff_a_w;
+    wire [HALF_WIDTH-1:0] diff_b_w;
+    wire [HALF_WIDTH-1:0] z_a_in_w;
+    wire [HALF_WIDTH-1:0] z_b_in_w;
+    wire [HALF_WIDTH-1:0] phi_z_a_w;
+    wire [HALF_WIDTH-1:0] phi_z_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [31:0] dist_a_w;
+    wire [31:0] dist_b_w;
+    wire child_tau_sel;
+
+    genvar gi;
+
+    assign start_ready = (state == ST_IDLE) && child_a_ready && child_b_ready;
+    assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
+    assign child_start = ((state == ST_IDLE) && start_ready && start) ||
+                         (state == ST_START_Z);
+    assign child_a_target = (state == ST_IDLE) ? target_flat[0+:HALF_WIDTH] :
+                                                z_a_in_r;
+    assign child_b_target = (state == ST_IDLE) ? target_flat[HALF_WIDTH+:HALF_WIDTH] :
+                                                z_b_in_r;
+
+    scloud_bdd8_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_a (
+        .target_flat (child_a_target),
+        .tau_sel     (child_tau_sel),
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .start       (child_start),
+        .start_ready (child_a_ready),
+        .busy        (),
+        .done        (child_a_done),
+        .decoded_flat(child_a_decoded)
+    );
+
+    scloud_bdd8_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_b (
+        .target_flat (child_b_target),
+        .tau_sel     (child_tau_sel),
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .start       (child_start),
+        .start_ready (child_b_ready),
+        .busy        (),
+        .done        (child_b_done),
+        .decoded_flat(child_b_decoded)
+    );
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
+            assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_a (
+        .d_flat(diff_a_w),
+        .b_flat(z_a_in_w)
+    );
+
+    scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_b (
+        .d_flat(diff_b_w),
+        .b_flat(z_b_in_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_phi_za (
+        .b_flat(z_a_r),
+        .y_flat(phi_z_a_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_phi_zb (
+        .b_flat(z_b_r),
+        .y_flat(phi_z_b_w)
+    );
+
+    assign cand_a_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_b_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_candidates
+            assign cand_a_w[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_l_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_a_w[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign cand_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_r_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_b_w[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_a (
+        .cand_flat   (cand_a_w),
+        .target_flat (target_r),
+        .distance_out(dist_a_w)
+    );
+
+    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_b (
+        .cand_flat   (cand_b_w),
+        .target_flat (target_r),
+        .distance_out(dist_b_w)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state        <= ST_IDLE;
+            tau_sel_r    <= 1'b0;
+            target_r     <= {TOTAL_WIDTH{1'b0}};
+            target_l_r   <= {HALF_WIDTH{1'b0}};
+            target_r_r   <= {HALF_WIDTH{1'b0}};
+            y_l_r        <= {HALF_WIDTH{1'b0}};
+            y_r_r        <= {HALF_WIDTH{1'b0}};
+            z_a_in_r     <= {HALF_WIDTH{1'b0}};
+            z_b_in_r     <= {HALF_WIDTH{1'b0}};
+            z_a_r        <= {HALF_WIDTH{1'b0}};
+            z_b_r        <= {HALF_WIDTH{1'b0}};
+            decoded_flat <= {TOTAL_WIDTH{1'b0}};
+            busy         <= 1'b0;
+            done         <= 1'b0;
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start_ready && start) begin
+                        tau_sel_r  <= tau_sel;
+                        target_r   <= target_flat;
+                        target_l_r <= target_flat[0+:HALF_WIDTH];
+                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
+                        busy       <= 1'b1;
+                        state      <= ST_WAIT_Y;
+                    end
+                end
+                ST_WAIT_Y: begin
+                    busy <= 1'b1;
+                    if (child_a_done && child_b_done) begin
+                        y_l_r <= child_a_decoded;
+                        y_r_r <= child_b_decoded;
+                        state <= ST_INV_PHI;
+                    end
+                end
+                ST_INV_PHI: begin
+                    z_a_in_r <= z_a_in_w;
+                    z_b_in_r <= z_b_in_w;
+                    state    <= ST_START_Z;
+                end
+                ST_START_Z: begin
+                    state <= ST_WAIT_Z;
+                end
+                ST_WAIT_Z: begin
+                    busy <= 1'b1;
+                    if (child_a_done && child_b_done) begin
+                        z_a_r <= child_a_decoded;
+                        z_b_r <= child_b_decoded;
+                        state <= ST_SELECT;
+                    end
+                end
+                ST_SELECT: begin
+                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
+                    state        <= ST_DONE;
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule
+
+module scloud_bdd32_seq_rt
+#(
+    parameter Q_WIDTH = 12
+)
+(
+    input  wire [(32*Q_WIDTH)-1:0] target_flat,
+    input  wire                    tau_sel,
+    input  wire                    clk,
+    input  wire                    rst_n,
+    input  wire                    start,
+    output wire                    start_ready,
+    output reg                     busy,
+    output reg                     done,
+    output reg  [(32*Q_WIDTH)-1:0] decoded_flat
+);
+
+    localparam COMPLEX_N    = 16;
+    localparam HALF_COMPLEX = COMPLEX_N / 2;
+    localparam HALF_COORDS  = COMPLEX_N;
+    localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
+    localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
+
+    localparam [2:0] ST_IDLE    = 3'd0;
+    localparam [2:0] ST_WAIT_Y  = 3'd1;
+    localparam [2:0] ST_INV_PHI = 3'd2;
+    localparam [2:0] ST_START_Z = 3'd3;
+    localparam [2:0] ST_WAIT_Z  = 3'd4;
+    localparam [2:0] ST_SELECT  = 3'd5;
+    localparam [2:0] ST_DONE    = 3'd6;
+
+    reg [2:0] state;
+    reg tau_sel_r;
+
+    reg [TOTAL_WIDTH-1:0] target_r;
+    reg [HALF_WIDTH-1:0]  target_l_r;
+    reg [HALF_WIDTH-1:0]  target_r_r;
+    reg [HALF_WIDTH-1:0]  y_l_r;
+    reg [HALF_WIDTH-1:0]  y_r_r;
+    reg [HALF_WIDTH-1:0]  z_a_in_r;
+    reg [HALF_WIDTH-1:0]  z_b_in_r;
+    reg [HALF_WIDTH-1:0]  z_a_r;
+    reg [HALF_WIDTH-1:0]  z_b_r;
+
+    wire child_start;
+    wire child_a_ready;
+    wire child_b_ready;
+    wire child_a_done;
+    wire child_b_done;
+    wire [HALF_WIDTH-1:0] child_a_target;
+    wire [HALF_WIDTH-1:0] child_b_target;
+    wire [HALF_WIDTH-1:0] child_a_decoded;
+    wire [HALF_WIDTH-1:0] child_b_decoded;
+    wire [HALF_WIDTH-1:0] diff_a_w;
+    wire [HALF_WIDTH-1:0] diff_b_w;
+    wire [HALF_WIDTH-1:0] z_a_in_w;
+    wire [HALF_WIDTH-1:0] z_b_in_w;
+    wire [HALF_WIDTH-1:0] phi_z_a_w;
+    wire [HALF_WIDTH-1:0] phi_z_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [31:0] dist_a_w;
+    wire [31:0] dist_b_w;
+    wire child_tau_sel;
+
+    genvar gi;
+
+    assign start_ready = (state == ST_IDLE) && child_a_ready && child_b_ready;
+    assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
+    assign child_start = ((state == ST_IDLE) && start_ready && start) ||
+                         (state == ST_START_Z);
+    assign child_a_target = (state == ST_IDLE) ? target_flat[0+:HALF_WIDTH] :
+                                                z_a_in_r;
+    assign child_b_target = (state == ST_IDLE) ? target_flat[HALF_WIDTH+:HALF_WIDTH] :
+                                                z_b_in_r;
+
+    scloud_bdd16_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_a (
+        .target_flat (child_a_target),
+        .tau_sel     (child_tau_sel),
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .start       (child_start),
+        .start_ready (child_a_ready),
+        .busy        (),
+        .done        (child_a_done),
+        .decoded_flat(child_a_decoded)
+    );
+
+    scloud_bdd16_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_b (
+        .target_flat (child_b_target),
+        .tau_sel     (child_tau_sel),
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .start       (child_start),
+        .start_ready (child_b_ready),
+        .busy        (),
+        .done        (child_b_done),
+        .decoded_flat(child_b_decoded)
+    );
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
+            assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_a (
+        .d_flat(diff_a_w),
+        .b_flat(z_a_in_w)
+    );
+
+    scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_b (
+        .d_flat(diff_b_w),
+        .b_flat(z_b_in_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_phi_za (
+        .b_flat(z_a_r),
+        .y_flat(phi_z_a_w)
+    );
+
+    scloud_bdd_phi_mul_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_phi_zb (
+        .b_flat(z_b_r),
+        .y_flat(phi_z_b_w)
+    );
+
+    assign cand_a_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_b_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
+
+    generate
+        for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_candidates
+            assign cand_a_w[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_l_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_a_w[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign cand_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
+                y_r_r[(gi*Q_WIDTH)+:Q_WIDTH] + phi_z_b_w[(gi*Q_WIDTH)+:Q_WIDTH];
+        end
+    endgenerate
+
+    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_a (
+        .cand_flat   (cand_a_w),
+        .target_flat (target_r),
+        .distance_out(dist_a_w)
+    );
+
+    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_b (
+        .cand_flat   (cand_b_w),
+        .target_flat (target_r),
+        .distance_out(dist_b_w)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state        <= ST_IDLE;
+            tau_sel_r    <= 1'b0;
+            target_r     <= {TOTAL_WIDTH{1'b0}};
+            target_l_r   <= {HALF_WIDTH{1'b0}};
+            target_r_r   <= {HALF_WIDTH{1'b0}};
+            y_l_r        <= {HALF_WIDTH{1'b0}};
+            y_r_r        <= {HALF_WIDTH{1'b0}};
+            z_a_in_r     <= {HALF_WIDTH{1'b0}};
+            z_b_in_r     <= {HALF_WIDTH{1'b0}};
+            z_a_r        <= {HALF_WIDTH{1'b0}};
+            z_b_r        <= {HALF_WIDTH{1'b0}};
+            decoded_flat <= {TOTAL_WIDTH{1'b0}};
+            busy         <= 1'b0;
+            done         <= 1'b0;
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start_ready && start) begin
+                        tau_sel_r  <= tau_sel;
+                        target_r   <= target_flat;
+                        target_l_r <= target_flat[0+:HALF_WIDTH];
+                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
+                        busy       <= 1'b1;
+                        state      <= ST_WAIT_Y;
+                    end
+                end
+                ST_WAIT_Y: begin
+                    busy <= 1'b1;
+                    if (child_a_done && child_b_done) begin
+                        y_l_r <= child_a_decoded;
+                        y_r_r <= child_b_decoded;
+                        state <= ST_INV_PHI;
+                    end
+                end
+                ST_INV_PHI: begin
+                    z_a_in_r <= z_a_in_w;
+                    z_b_in_r <= z_b_in_w;
+                    state    <= ST_START_Z;
+                end
+                ST_START_Z: begin
+                    state <= ST_WAIT_Z;
+                end
+                ST_WAIT_Z: begin
+                    busy <= 1'b1;
+                    if (child_a_done && child_b_done) begin
+                        z_a_r <= child_a_decoded;
+                        z_b_r <= child_b_decoded;
+                        state <= ST_SELECT;
+                    end
+                end
+                ST_SELECT: begin
+                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
+                    state        <= ST_DONE;
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule

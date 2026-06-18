@@ -7,7 +7,8 @@
       "Bash(cd d:/scloud+ && echo \"=== Removing VCD waveform files ===\" && rm -v *.vcd && echo \"\" && echo \"=== Removing old sim_build directories ===\" && rm -rf sim_build_cmodel_fix sim_build_cmodel_fix2 sim_build_cmodel_fix3 sim_build_cmodel_fix4 sim_build_cmodel_fix5 sim_build_cmodel_fix6 sim_build_cmodel_fix7 sim_build_param_update sim_build_param_update2 sim_build_param_update3 && echo \"Done\" && echo \"\" && echo \"=== Removing temp bench file ===\" && rm -f sw/build/bench.c sw/build/bench.exe && echo \"Done\")"
     ],
     "additionalDirectories": [
-      "D:\\scloud+"
+      "D:\\scloud+",
+      "c:\\Users\\yangfumeng1\\Desktop"
     ]
   }
 }
