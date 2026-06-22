@@ -69,6 +69,9 @@ The BDD follows the Fast Scloud+ unfold-factor-8 area/latency trade-off:
 - A resident BDD8 kernel is called 16 times per BDD32 operation.
 - BDD32 and BDD16 share one exact 8-lane sequential distance engine. BDD16
   requests are zero-extended into its 32-coordinate input.
+- The shared engine uses a five-stage per-chunk DSP datapath: registered
+  difference, two multiply stages, registered lane sum, and accumulation;
+  final strict comparison is a separate state.
 - BDD8 and BDD4 retain parallel distance logic to avoid excessive latency.
 - Distance arithmetic remains 12-bit squared difference with 32-bit sum.
 - Candidate selection must remain strict `<`; a tie selects candidate B.
@@ -228,7 +231,7 @@ Expected primary markers:
 
 ```text
 TB_PASS scloud_msgfunc_rce_accel
-TB_PASS scloud_bdd_distance_seq cases=200
+TB_PASS scloud_bdd_distance_seq random=200 ties=2
 TB_PASS scloud_bdd32_seq_rt cases=20
 TB_PASS spuv3_cfg_sfr_scloud
 TB_PASS scloudplus_bmm

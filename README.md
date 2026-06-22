@@ -9,6 +9,10 @@ unfold-factor-8 recursion reuse, and one exact 8-lane sequential distance
 engine shared by BDD32/BDD16. BDD8/BDD4 retain parallel distance logic to
 bound latency.
 
+The shared 8-lane engine pipelines difference inputs, two multiply stages,
+lane sum, accumulation, and comparison. This targets the constrained 200 MHz
+critical path while leaving the low-level parallel distance trees unchanged.
+
 BDD32 now accepts its 384-bit target as two 192-bit beats. The RCE wrapper
 streams Q halves directly from DPRAM and retains only one 192-bit scratch half
 for fused add/sub operations instead of two full 384-bit Q caches.

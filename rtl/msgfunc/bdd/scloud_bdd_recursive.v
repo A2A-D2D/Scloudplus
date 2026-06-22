@@ -185,6 +185,7 @@ module scloud_bdd_distance_seq
 );
 
     localparam TERM_WIDTH = (2 * Q_WIDTH) + 2;
+    localparam DIFF_WIDTH = Q_WIDTH + 1;
     localparam CHUNKS     = COORDS / LANES;
 
     function integer clog2;
@@ -201,35 +202,51 @@ module scloud_bdd_distance_seq
     endfunction
 
     localparam CHUNK_BITS = (CHUNKS <= 1) ? 1 : clog2(CHUNKS);
-    localparam [1:0] ST_IDLE  = 2'd0;
-    localparam [1:0] ST_RUN_A = 2'd1;
-    localparam [1:0] ST_RUN_B = 2'd2;
-    localparam [1:0] ST_DONE  = 2'd3;
+    localparam [2:0] ST_IDLE      = 3'd0;
+    localparam [2:0] ST_LOAD_DIFF = 3'd1;
+    localparam [2:0] ST_MUL_1     = 3'd2;
+    localparam [2:0] ST_MUL_2     = 3'd3;
+    localparam [2:0] ST_SUM       = 3'd4;
+    localparam [2:0] ST_ACCUM     = 3'd5;
+    localparam [2:0] ST_COMPARE   = 3'd6;
+    localparam [2:0] ST_DONE      = 3'd7;
 
-    reg [1:0] state;
+    reg [2:0] state;
     reg [CHUNK_BITS-1:0] chunk_idx;
+    reg phase_b;
     reg [31:0] accum_a;
     reg [31:0] accum_b;
+    reg [(LANES*DIFF_WIDTH)-1:0] diff_pipe_r;
+    reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_1_r;
+    reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_2_r;
+    reg [31:0] lane_sum_r;
 
     wire [(COORDS*Q_WIDTH)-1:0] active_cand;
     wire [(COORDS*Q_WIDTH)-1:0] shifted_cand;
     wire [(COORDS*Q_WIDTH)-1:0] shifted_target;
+    wire [(LANES*DIFF_WIDTH)-1:0] diff_flat;
     wire [(LANES*TERM_WIDTH)-1:0] sq_flat;
-    wire [31:0] lane_sum;
+    wire [31:0] lane_sum_w;
 
     assign start_ready = (state == ST_IDLE);
-    assign active_cand = (state == ST_RUN_B) ? cand_b_flat : cand_a_flat;
+    assign active_cand = phase_b ? cand_b_flat : cand_a_flat;
     assign shifted_cand = active_cand >> (chunk_idx * LANES * Q_WIDTH);
     assign shifted_target = target_flat >> (chunk_idx * LANES * Q_WIDTH);
 
     genvar gi;
     generate
         for (gi = 0; gi < LANES; gi = gi + 1) begin : gen_lane
-            scloud_bdd_sq_diff_q #(.Q_WIDTH(Q_WIDTH)) u_sq_diff (
-                .cand_q  (shifted_cand[(gi*Q_WIDTH)+:Q_WIDTH]),
-                .target_q(shifted_target[(gi*Q_WIDTH)+:Q_WIDTH]),
-                .sq_diff (sq_flat[(gi*TERM_WIDTH)+:TERM_WIDTH])
-            );
+            wire [Q_WIDTH-1:0] diff_q;
+            wire signed [DIFF_WIDTH-1:0] diff_pipe_lane;
+
+            assign diff_q = shifted_cand[(gi*Q_WIDTH)+:Q_WIDTH] -
+                            shifted_target[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_flat[(gi*DIFF_WIDTH)+:DIFF_WIDTH] =
+                {diff_q[Q_WIDTH-1], diff_q};
+            assign diff_pipe_lane =
+                diff_pipe_r[(gi*DIFF_WIDTH)+:DIFF_WIDTH];
+            assign sq_flat[(gi*TERM_WIDTH)+:TERM_WIDTH] =
+                diff_pipe_lane * diff_pipe_lane;
         end
     endgenerate
 
@@ -238,14 +255,31 @@ module scloud_bdd_distance_seq
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
     ) u_lane_sum (
-        .terms_flat(sq_flat),
-        .sum_out   (lane_sum)
+        .terms_flat(sq_pipe_2_r),
+        .sum_out   (lane_sum_w)
     );
+
+    /*
+     * Keep the DSP data pipeline free of asynchronous reset so Vivado can
+     * absorb these registers into DSP48 AREG/MREG/PREG stages. Control state
+     * is reset separately; pipeline data is always overwritten before use.
+     */
+    always @(posedge clk) begin
+        if (state == ST_LOAD_DIFF)
+            diff_pipe_r <= diff_flat;
+        if (state == ST_MUL_1)
+            sq_pipe_1_r <= sq_flat;
+        if (state == ST_MUL_2)
+            sq_pipe_2_r <= sq_pipe_1_r;
+        if (state == ST_SUM)
+            lane_sum_r <= lane_sum_w;
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state      <= ST_IDLE;
             chunk_idx  <= {CHUNK_BITS{1'b0}};
+            phase_b    <= 1'b0;
             accum_a    <= 32'd0;
             accum_b    <= 32'd0;
             distance_a <= 32'd0;
@@ -260,31 +294,51 @@ module scloud_bdd_distance_seq
                     busy <= 1'b0;
                     if (start) begin
                         chunk_idx <= {CHUNK_BITS{1'b0}};
+                        phase_b   <= 1'b0;
                         accum_a   <= 32'd0;
                         accum_b   <= 32'd0;
                         busy      <= 1'b1;
-                        state     <= ST_RUN_A;
+                        state     <= ST_LOAD_DIFF;
                     end
                 end
-                ST_RUN_A: begin
-                    accum_a <= accum_a + lane_sum;
-                    if (chunk_idx == CHUNKS-1) begin
-                        chunk_idx <= {CHUNK_BITS{1'b0}};
-                        state     <= ST_RUN_B;
+                ST_LOAD_DIFF: begin
+                    state <= ST_MUL_1;
+                end
+                ST_MUL_1: begin
+                    state <= ST_MUL_2;
+                end
+                ST_MUL_2: begin
+                    state <= ST_SUM;
+                end
+                ST_SUM: begin
+                    state <= ST_ACCUM;
+                end
+                ST_ACCUM: begin
+                    if (!phase_b) begin
+                        accum_a <= accum_a + lane_sum_r;
+                        if (chunk_idx == CHUNKS-1) begin
+                            distance_a <= accum_a + lane_sum_r;
+                            chunk_idx  <= {CHUNK_BITS{1'b0}};
+                            phase_b    <= 1'b1;
+                            state      <= ST_LOAD_DIFF;
+                        end else begin
+                            chunk_idx <= chunk_idx + 1'b1;
+                            state     <= ST_LOAD_DIFF;
+                        end
                     end else begin
-                        chunk_idx <= chunk_idx + 1'b1;
+                        accum_b <= accum_b + lane_sum_r;
+                        if (chunk_idx == CHUNKS-1) begin
+                            distance_b <= accum_b + lane_sum_r;
+                            state      <= ST_COMPARE;
+                        end else begin
+                            chunk_idx <= chunk_idx + 1'b1;
+                            state     <= ST_LOAD_DIFF;
+                        end
                     end
                 end
-                ST_RUN_B: begin
-                    accum_b <= accum_b + lane_sum;
-                    if (chunk_idx == CHUNKS-1) begin
-                        distance_a <= accum_a;
-                        distance_b <= accum_b + lane_sum;
-                        select_a   <= (accum_a < (accum_b + lane_sum));
-                        state      <= ST_DONE;
-                    end else begin
-                        chunk_idx <= chunk_idx + 1'b1;
-                    end
+                ST_COMPARE: begin
+                    select_a <= (distance_a < distance_b);
+                    state    <= ST_DONE;
                 end
                 ST_DONE: begin
                     busy  <= 1'b0;

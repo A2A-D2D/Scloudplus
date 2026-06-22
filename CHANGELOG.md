@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-06-22 - Shared distance DSP pipeline
+
+### Constrained synthesis trigger
+
+- Vivado 2019.1 standalone synthesis with the 5.000 ns XDC produced
+  8,995 LUT, 4,219 FF, and 40 DSP48 blocks.
+- Timing failed with WNS=-17.908 ns, TNS=-3086.235 ns, and 671 failing setup
+  endpoints. The worst 22.756 ns path crossed candidate/phi logic, one DSP48,
+  the lane sum, accumulation, and final comparison in `u_dist_seq`.
+- DRC reported all 40 DSPs without input, MREG, or PREG pipelining. This met
+  the documented condition for adding a targeted DSP pipeline.
+
+### Changed
+
+- Split each shared distance chunk into difference-input, multiply stage 1,
+  multiply stage 2, lane-sum, and accumulation states.
+- Moved the strict candidate A/B comparison into its own state.
+- Kept DSP data registers in a no-reset clocked block so Vivado can absorb
+  them into DSP48 AREG/MREG/PREG. The reset FSM guarantees every pipeline
+  value is overwritten before use.
+- Kept the low-level BDD8/BDD4 parallel distance trees unchanged until the
+  next constrained synthesis identifies their actual timing impact.
+
+### Latency and verification
+
+- The pipeline adds 33 observed cycles per shared distance transaction and
+  165 cycles per BDD32 operation because the engine is invoked five times.
+- Exact distance comparison passed 200 random cases plus two explicit ties;
+  ties still select candidate B.
+- Random BDD32 tau3/tau4 equivalence and all RCE two/four-block fused and
+  non-fused regressions passed.
+- New timing and DSP-register DRC results are pending a Vivado rerun.
+
 ## 2026-06-22 - Two-beat BDD target and half-streamed Q datapath
 
 ### Changed

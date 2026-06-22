@@ -96,6 +96,22 @@ module tb_scloud_bdd_distance_seq;
         repeat (4) @(posedge clk);
         rst_n = 1'b1;
 
+        test_index = -2;
+        cand_a_flat = {(COORDS*Q_WIDTH){1'b0}};
+        cand_b_flat = {(COORDS*Q_WIDTH){1'b0}};
+        target_flat = {(COORDS*Q_WIDTH){1'b0}};
+        run_case;
+
+        test_index = -1;
+        for (coord_index = 0; coord_index < COORDS;
+             coord_index = coord_index + 1) begin
+            cand_a_flat[(coord_index*Q_WIDTH)+:Q_WIDTH] = $random;
+            cand_b_flat[(coord_index*Q_WIDTH)+:Q_WIDTH] =
+                cand_a_flat[(coord_index*Q_WIDTH)+:Q_WIDTH];
+            target_flat[(coord_index*Q_WIDTH)+:Q_WIDTH] = $random;
+        end
+        run_case;
+
         for (test_index = 0; test_index < 200; test_index = test_index + 1) begin
             for (coord_index = 0; coord_index < COORDS; coord_index = coord_index + 1) begin
                 cand_a_flat[(coord_index*Q_WIDTH)+:Q_WIDTH] = $random;
@@ -106,7 +122,7 @@ module tb_scloud_bdd_distance_seq;
         end
 
         if (error_count == 0)
-            $display("TB_PASS scloud_bdd_distance_seq cases=200");
+            $display("TB_PASS scloud_bdd_distance_seq random=200 ties=2");
         else
             $display("TB_FAIL scloud_bdd_distance_seq errors=%0d", error_count);
         $finish;

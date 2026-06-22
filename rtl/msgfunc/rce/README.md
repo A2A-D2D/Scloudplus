@@ -83,7 +83,8 @@ BDD16 and BDD32 share one 8-lane `scloud_bdd_distance_seq`. Their distance
 phases are mutually exclusive in the resident hierarchy. BDD16 requests are
 zero-extended to the shared 32-coordinate engine; the extra coordinates add
 zero to both candidates. The lanes scan candidate A and candidate B in chunks
-and accumulate the same 32-bit squared distances as the parallel trees. BDD8
+through registered difference, multiply, lane-sum, and accumulation stages,
+then compare the same 32-bit squared distances as the parallel trees. BDD8
 and BDD4 keep their parallel distance trees to limit the latency increase.
 The last measured Vivado baseline had 48 DSPs. The shared-engine RTL removes
 one 8-lane copy, so about 40 DSP48s are expected, but that figure is not yet a
