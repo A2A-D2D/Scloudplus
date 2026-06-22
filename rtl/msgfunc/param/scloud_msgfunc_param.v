@@ -670,6 +670,13 @@ module scloud_msgenc_param
 
 endmodule
 
+/*
+ * Legacy fixed-tau roundtrip wrappers are disabled in the optimized RCE
+ * working set.  Define SCLOUD_ENABLE_FIXED_TAU_MSGFUNC only for archived
+ * regression flows that also provide scloud_bdd{32,16,8}_seq.
+ */
+`ifdef SCLOUD_ENABLE_FIXED_TAU_MSGFUNC
+
 module scloud_msgdec_param
 #(
     parameter COMPLEX_N     = 16,
@@ -833,3 +840,5 @@ module scloud_msgfunc_param
     );
 
 endmodule
+
+`endif

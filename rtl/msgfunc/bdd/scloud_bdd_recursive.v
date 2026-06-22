@@ -163,6 +163,144 @@ module scloud_bdd_distance_tree
 
 endmodule
 
+module scloud_bdd_distance_seq
+#(
+    parameter Q_WIDTH = 12,
+    parameter COORDS  = 32,
+    parameter LANES   = 8
+)
+(
+    input  wire [(COORDS*Q_WIDTH)-1:0] cand_a_flat,
+    input  wire [(COORDS*Q_WIDTH)-1:0] cand_b_flat,
+    input  wire [(COORDS*Q_WIDTH)-1:0] target_flat,
+    input  wire                        clk,
+    input  wire                        rst_n,
+    input  wire                        start,
+    output wire                        start_ready,
+    output reg                         busy,
+    output reg                         done,
+    output reg                         select_a,
+    output reg  [31:0]                 distance_a,
+    output reg  [31:0]                 distance_b
+);
+
+    localparam TERM_WIDTH = (2 * Q_WIDTH) + 2;
+    localparam CHUNKS     = COORDS / LANES;
+
+    function integer clog2;
+        input integer value;
+        integer temp;
+        begin
+            temp = value - 1;
+            clog2 = 0;
+            while (temp > 0) begin
+                clog2 = clog2 + 1;
+                temp = temp >> 1;
+            end
+        end
+    endfunction
+
+    localparam CHUNK_BITS = (CHUNKS <= 1) ? 1 : clog2(CHUNKS);
+    localparam [1:0] ST_IDLE  = 2'd0;
+    localparam [1:0] ST_RUN_A = 2'd1;
+    localparam [1:0] ST_RUN_B = 2'd2;
+    localparam [1:0] ST_DONE  = 2'd3;
+
+    reg [1:0] state;
+    reg [CHUNK_BITS-1:0] chunk_idx;
+    reg [31:0] accum_a;
+    reg [31:0] accum_b;
+
+    wire [(COORDS*Q_WIDTH)-1:0] active_cand;
+    wire [(COORDS*Q_WIDTH)-1:0] shifted_cand;
+    wire [(COORDS*Q_WIDTH)-1:0] shifted_target;
+    wire [(LANES*TERM_WIDTH)-1:0] sq_flat;
+    wire [31:0] lane_sum;
+
+    assign start_ready = (state == ST_IDLE);
+    assign active_cand = (state == ST_RUN_B) ? cand_b_flat : cand_a_flat;
+    assign shifted_cand = active_cand >> (chunk_idx * LANES * Q_WIDTH);
+    assign shifted_target = target_flat >> (chunk_idx * LANES * Q_WIDTH);
+
+    genvar gi;
+    generate
+        for (gi = 0; gi < LANES; gi = gi + 1) begin : gen_lane
+            scloud_bdd_sq_diff_q #(.Q_WIDTH(Q_WIDTH)) u_sq_diff (
+                .cand_q  (shifted_cand[(gi*Q_WIDTH)+:Q_WIDTH]),
+                .target_q(shifted_target[(gi*Q_WIDTH)+:Q_WIDTH]),
+                .sq_diff (sq_flat[(gi*TERM_WIDTH)+:TERM_WIDTH])
+            );
+        end
+    endgenerate
+
+    scloud_bdd_sum_tree #(
+        .TERMS    (LANES),
+        .IN_WIDTH (TERM_WIDTH),
+        .OUT_WIDTH(32)
+    ) u_lane_sum (
+        .terms_flat(sq_flat),
+        .sum_out   (lane_sum)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state      <= ST_IDLE;
+            chunk_idx  <= {CHUNK_BITS{1'b0}};
+            accum_a    <= 32'd0;
+            accum_b    <= 32'd0;
+            distance_a <= 32'd0;
+            distance_b <= 32'd0;
+            select_a   <= 1'b0;
+            busy       <= 1'b0;
+            done       <= 1'b0;
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start) begin
+                        chunk_idx <= {CHUNK_BITS{1'b0}};
+                        accum_a   <= 32'd0;
+                        accum_b   <= 32'd0;
+                        busy      <= 1'b1;
+                        state     <= ST_RUN_A;
+                    end
+                end
+                ST_RUN_A: begin
+                    accum_a <= accum_a + lane_sum;
+                    if (chunk_idx == CHUNKS-1) begin
+                        chunk_idx <= {CHUNK_BITS{1'b0}};
+                        state     <= ST_RUN_B;
+                    end else begin
+                        chunk_idx <= chunk_idx + 1'b1;
+                    end
+                end
+                ST_RUN_B: begin
+                    accum_b <= accum_b + lane_sum;
+                    if (chunk_idx == CHUNKS-1) begin
+                        distance_a <= accum_a;
+                        distance_b <= accum_b + lane_sum;
+                        select_a   <= (accum_a < (accum_b + lane_sum));
+                        state      <= ST_DONE;
+                    end else begin
+                        chunk_idx <= chunk_idx + 1'b1;
+                    end
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule
+
 /* scloud_bdd_distance — Legacy reference module.
  * Now superseded by scloud_bdd_distance_tree which uses a structural
  * tree-adder for better synthesis QoR.  Kept under `ifdef for regression only.

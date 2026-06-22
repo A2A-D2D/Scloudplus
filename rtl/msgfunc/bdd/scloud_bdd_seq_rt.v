@@ -4,9 +4,9 @@
  * Runtime-tau sequential BDD nodes for the RCE wrapper.
  *
  * These modules keep one physical BDD datapath and select tau=3/tau=4
- * rounding at run time.  The topology mirrors the existing fixed-tau
- * scloud_bdd{32,16,8,4}_seq modules so latency stays close to the current
- * implementation while avoiding duplicate tau3/tau4 BDD instances.
+ * rounding at run time. BDD16 and BDD32 serialize their four child calls
+ * through one child instance. The resulting unfold-factor-8 hierarchy keeps
+ * one BDD8 kernel and follows the area/latency trade-off in Fast Scloud+.
  */
 
 module scloud_bdd_round_coord_q_rt
@@ -532,15 +532,20 @@ module scloud_bdd16_seq_rt
     localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
     localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
 
-    localparam [2:0] ST_IDLE    = 3'd0;
-    localparam [2:0] ST_WAIT_Y  = 3'd1;
-    localparam [2:0] ST_INV_PHI = 3'd2;
-    localparam [2:0] ST_START_Z = 3'd3;
-    localparam [2:0] ST_WAIT_Z  = 3'd4;
-    localparam [2:0] ST_SELECT  = 3'd5;
-    localparam [2:0] ST_DONE    = 3'd6;
+    localparam [3:0] ST_IDLE     = 4'd0;
+    localparam [3:0] ST_WAIT_YL  = 4'd1;
+    localparam [3:0] ST_START_YR = 4'd2;
+    localparam [3:0] ST_WAIT_YR  = 4'd3;
+    localparam [3:0] ST_INV_PHI  = 4'd4;
+    localparam [3:0] ST_START_ZA = 4'd5;
+    localparam [3:0] ST_WAIT_ZA  = 4'd6;
+    localparam [3:0] ST_START_ZB = 4'd7;
+    localparam [3:0] ST_WAIT_ZB  = 4'd8;
+    localparam [3:0] ST_SELECT    = 4'd9;
+    localparam [3:0] ST_WAIT_DIST = 4'd10;
+    localparam [3:0] ST_DONE      = 4'd11;
 
-    reg [2:0] state;
+    reg [3:0] state;
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
@@ -554,14 +559,10 @@ module scloud_bdd16_seq_rt
     reg [HALF_WIDTH-1:0]  z_b_r;
 
     wire child_start;
-    wire child_a_ready;
-    wire child_b_ready;
-    wire child_a_done;
-    wire child_b_done;
-    wire [HALF_WIDTH-1:0] child_a_target;
-    wire [HALF_WIDTH-1:0] child_b_target;
-    wire [HALF_WIDTH-1:0] child_a_decoded;
-    wire [HALF_WIDTH-1:0] child_b_decoded;
+    wire child_ready;
+    wire child_done;
+    wire [HALF_WIDTH-1:0] child_target;
+    wire [HALF_WIDTH-1:0] child_decoded;
     wire [HALF_WIDTH-1:0] diff_a_w;
     wire [HALF_WIDTH-1:0] diff_b_w;
     wire [HALF_WIDTH-1:0] z_a_in_w;
@@ -570,43 +571,33 @@ module scloud_bdd16_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
-    wire [31:0] dist_a_w;
-    wire [31:0] dist_b_w;
+    wire dist_start;
+    wire dist_done;
+    wire dist_select_a;
     wire child_tau_sel;
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE) && child_a_ready && child_b_ready;
+    assign start_ready = (state == ST_IDLE) && child_ready;
     assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
     assign child_start = ((state == ST_IDLE) && start_ready && start) ||
-                         (state == ST_START_Z);
-    assign child_a_target = (state == ST_IDLE) ? target_flat[0+:HALF_WIDTH] :
-                                                z_a_in_r;
-    assign child_b_target = (state == ST_IDLE) ? target_flat[HALF_WIDTH+:HALF_WIDTH] :
-                                                z_b_in_r;
+                         (state == ST_START_YR) ||
+                         (state == ST_START_ZA) ||
+                         (state == ST_START_ZB);
+    assign child_target = (state == ST_IDLE)     ? target_flat[0+:HALF_WIDTH] :
+                          (state == ST_START_YR) ? target_r_r :
+                          (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
-    scloud_bdd8_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_a (
-        .target_flat (child_a_target),
+    scloud_bdd8_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child (
+        .target_flat (child_target),
         .tau_sel     (child_tau_sel),
         .clk         (clk),
         .rst_n       (rst_n),
         .start       (child_start),
-        .start_ready (child_a_ready),
+        .start_ready (child_ready),
         .busy        (),
-        .done        (child_a_done),
-        .decoded_flat(child_a_decoded)
-    );
-
-    scloud_bdd8_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_b (
-        .target_flat (child_b_target),
-        .tau_sel     (child_tau_sel),
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .start       (child_start),
-        .start_ready (child_b_ready),
-        .busy        (),
-        .done        (child_b_done),
-        .decoded_flat(child_b_decoded)
+        .done        (child_done),
+        .decoded_flat(child_decoded)
     );
 
     generate
@@ -650,16 +641,25 @@ module scloud_bdd16_seq_rt
         end
     endgenerate
 
-    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_a (
-        .cand_flat   (cand_a_w),
-        .target_flat (target_r),
-        .distance_out(dist_a_w)
-    );
+    assign dist_start = (state == ST_SELECT);
 
-    scloud_bdd_distance_tree #(.Q_WIDTH(Q_WIDTH), .COORDS(2*COMPLEX_N)) u_dist_b (
-        .cand_flat   (cand_b_w),
-        .target_flat (target_r),
-        .distance_out(dist_b_w)
+    scloud_bdd_distance_seq #(
+        .Q_WIDTH(Q_WIDTH),
+        .COORDS (2*COMPLEX_N),
+        .LANES  (8)
+    ) u_dist_seq (
+        .cand_a_flat(cand_a_w),
+        .cand_b_flat(cand_b_w),
+        .target_flat(target_r),
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .start      (dist_start),
+        .start_ready(),
+        .busy       (),
+        .done       (dist_done),
+        .select_a   (dist_select_a),
+        .distance_a (),
+        .distance_b ()
     );
 
     always @(posedge clk or negedge rst_n) begin
@@ -689,36 +689,50 @@ module scloud_bdd16_seq_rt
                         target_l_r <= target_flat[0+:HALF_WIDTH];
                         target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
-                        state      <= ST_WAIT_Y;
+                        state      <= ST_WAIT_YL;
                     end
                 end
-                ST_WAIT_Y: begin
+                ST_WAIT_YL: begin
                     busy <= 1'b1;
-                    if (child_a_done && child_b_done) begin
-                        y_l_r <= child_a_decoded;
-                        y_r_r <= child_b_decoded;
+                    if (child_done) begin
+                        y_l_r <= child_decoded;
+                        state <= ST_START_YR;
+                    end
+                end
+                ST_START_YR: state <= ST_WAIT_YR;
+                ST_WAIT_YR: begin
+                    if (child_done) begin
+                        y_r_r <= child_decoded;
                         state <= ST_INV_PHI;
                     end
                 end
                 ST_INV_PHI: begin
                     z_a_in_r <= z_a_in_w;
                     z_b_in_r <= z_b_in_w;
-                    state    <= ST_START_Z;
+                    state    <= ST_START_ZA;
                 end
-                ST_START_Z: begin
-                    state <= ST_WAIT_Z;
+                ST_START_ZA: state <= ST_WAIT_ZA;
+                ST_WAIT_ZA: begin
+                    if (child_done) begin
+                        z_a_r <= child_decoded;
+                        state <= ST_START_ZB;
+                    end
                 end
-                ST_WAIT_Z: begin
-                    busy <= 1'b1;
-                    if (child_a_done && child_b_done) begin
-                        z_a_r <= child_a_decoded;
-                        z_b_r <= child_b_decoded;
+                ST_START_ZB: state <= ST_WAIT_ZB;
+                ST_WAIT_ZB: begin
+                    if (child_done) begin
+                        z_b_r <= child_decoded;
                         state <= ST_SELECT;
                     end
                 end
                 ST_SELECT: begin
-                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
-                    state        <= ST_DONE;
+                    state <= ST_WAIT_DIST;
+                end
+                ST_WAIT_DIST: begin
+                    if (dist_done) begin
+                        decoded_flat <= dist_select_a ? cand_a_w : cand_b_w;
+                        state        <= ST_DONE;
+                    end
                 end
                 ST_DONE: begin
                     busy  <= 1'b0;
@@ -757,15 +771,19 @@ module scloud_bdd32_seq_rt
     localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
     localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
 
-    localparam [2:0] ST_IDLE    = 3'd0;
-    localparam [2:0] ST_WAIT_Y  = 3'd1;
-    localparam [2:0] ST_INV_PHI = 3'd2;
-    localparam [2:0] ST_START_Z = 3'd3;
-    localparam [2:0] ST_WAIT_Z  = 3'd4;
-    localparam [2:0] ST_SELECT  = 3'd5;
-    localparam [2:0] ST_DONE    = 3'd6;
+    localparam [3:0] ST_IDLE     = 4'd0;
+    localparam [3:0] ST_WAIT_YL  = 4'd1;
+    localparam [3:0] ST_START_YR = 4'd2;
+    localparam [3:0] ST_WAIT_YR  = 4'd3;
+    localparam [3:0] ST_INV_PHI  = 4'd4;
+    localparam [3:0] ST_START_ZA = 4'd5;
+    localparam [3:0] ST_WAIT_ZA  = 4'd6;
+    localparam [3:0] ST_START_ZB = 4'd7;
+    localparam [3:0] ST_WAIT_ZB  = 4'd8;
+    localparam [3:0] ST_SELECT   = 4'd9;
+    localparam [3:0] ST_DONE     = 4'd10;
 
-    reg [2:0] state;
+    reg [3:0] state;
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
@@ -779,14 +797,10 @@ module scloud_bdd32_seq_rt
     reg [HALF_WIDTH-1:0]  z_b_r;
 
     wire child_start;
-    wire child_a_ready;
-    wire child_b_ready;
-    wire child_a_done;
-    wire child_b_done;
-    wire [HALF_WIDTH-1:0] child_a_target;
-    wire [HALF_WIDTH-1:0] child_b_target;
-    wire [HALF_WIDTH-1:0] child_a_decoded;
-    wire [HALF_WIDTH-1:0] child_b_decoded;
+    wire child_ready;
+    wire child_done;
+    wire [HALF_WIDTH-1:0] child_target;
+    wire [HALF_WIDTH-1:0] child_decoded;
     wire [HALF_WIDTH-1:0] diff_a_w;
     wire [HALF_WIDTH-1:0] diff_b_w;
     wire [HALF_WIDTH-1:0] z_a_in_w;
@@ -801,37 +815,26 @@ module scloud_bdd32_seq_rt
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE) && child_a_ready && child_b_ready;
+    assign start_ready = (state == ST_IDLE) && child_ready;
     assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
     assign child_start = ((state == ST_IDLE) && start_ready && start) ||
-                         (state == ST_START_Z);
-    assign child_a_target = (state == ST_IDLE) ? target_flat[0+:HALF_WIDTH] :
-                                                z_a_in_r;
-    assign child_b_target = (state == ST_IDLE) ? target_flat[HALF_WIDTH+:HALF_WIDTH] :
-                                                z_b_in_r;
+                         (state == ST_START_YR) ||
+                         (state == ST_START_ZA) ||
+                         (state == ST_START_ZB);
+    assign child_target = (state == ST_IDLE)     ? target_flat[0+:HALF_WIDTH] :
+                          (state == ST_START_YR) ? target_r_r :
+                          (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
-    scloud_bdd16_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_a (
-        .target_flat (child_a_target),
+    scloud_bdd16_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child (
+        .target_flat (child_target),
         .tau_sel     (child_tau_sel),
         .clk         (clk),
         .rst_n       (rst_n),
         .start       (child_start),
-        .start_ready (child_a_ready),
+        .start_ready (child_ready),
         .busy        (),
-        .done        (child_a_done),
-        .decoded_flat(child_a_decoded)
-    );
-
-    scloud_bdd16_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_b (
-        .target_flat (child_b_target),
-        .tau_sel     (child_tau_sel),
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .start       (child_start),
-        .start_ready (child_b_ready),
-        .busy        (),
-        .done        (child_b_done),
-        .decoded_flat(child_b_decoded)
+        .done        (child_done),
+        .decoded_flat(child_decoded)
     );
 
     generate
@@ -914,30 +917,39 @@ module scloud_bdd32_seq_rt
                         target_l_r <= target_flat[0+:HALF_WIDTH];
                         target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
-                        state      <= ST_WAIT_Y;
+                        state      <= ST_WAIT_YL;
                     end
                 end
-                ST_WAIT_Y: begin
+                ST_WAIT_YL: begin
                     busy <= 1'b1;
-                    if (child_a_done && child_b_done) begin
-                        y_l_r <= child_a_decoded;
-                        y_r_r <= child_b_decoded;
+                    if (child_done) begin
+                        y_l_r <= child_decoded;
+                        state <= ST_START_YR;
+                    end
+                end
+                ST_START_YR: state <= ST_WAIT_YR;
+                ST_WAIT_YR: begin
+                    if (child_done) begin
+                        y_r_r <= child_decoded;
                         state <= ST_INV_PHI;
                     end
                 end
                 ST_INV_PHI: begin
                     z_a_in_r <= z_a_in_w;
                     z_b_in_r <= z_b_in_w;
-                    state    <= ST_START_Z;
+                    state    <= ST_START_ZA;
                 end
-                ST_START_Z: begin
-                    state <= ST_WAIT_Z;
+                ST_START_ZA: state <= ST_WAIT_ZA;
+                ST_WAIT_ZA: begin
+                    if (child_done) begin
+                        z_a_r <= child_decoded;
+                        state <= ST_START_ZB;
+                    end
                 end
-                ST_WAIT_Z: begin
-                    busy <= 1'b1;
-                    if (child_a_done && child_b_done) begin
-                        z_a_r <= child_a_decoded;
-                        z_b_r <= child_b_decoded;
+                ST_START_ZB: state <= ST_WAIT_ZB;
+                ST_WAIT_ZB: begin
+                    if (child_done) begin
+                        z_b_r <= child_decoded;
                         state <= ST_SELECT;
                     end
                 end

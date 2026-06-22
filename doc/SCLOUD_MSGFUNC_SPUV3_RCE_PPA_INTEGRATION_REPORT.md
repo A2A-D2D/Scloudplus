@@ -64,6 +64,12 @@ Host / SPU core 配置 SFR
 
 `scloud_msgfunc_rce_accel.v` 是真实 RCE 中推荐直接实例化的边界模块。它负责：
 
+```text
+唯一 MsgFunc 算法顶层：scloud_msgfunc_rce_accel
+```
+
+`spuv3_cfg_sfr_scloud` 是与其并列的可选 SFR 扩展模块，不是算法顶层。`scloud_bdd32_seq_rt`、`scloud_msgenc_param`、`q_to_label/phi_decode/label_to_msg` 均为内部子模块，不能作为 RCE synthesis top。
+
 - 接收 RCE top-level 解码后的 `start/op/tau_sel/block_count`。
 - 从 DPRAM 读取 message block、Q block、aux Q block。
 - 把两个 256-bit DPRAM word 还原成 32 x 12-bit Q 坐标。
@@ -84,6 +90,18 @@ q_to_label/phi_decode/label_to_msg tau=4
 ```
 
 其中 MsgEnc 基本是组合路径；MsgDec 的面积大头 BDD 已经合并为一套 runtime-tau datapath。tau3/tau4 仍各保留一套轻量 label/message 后处理，避免把 C-model aligned 的硬编码 bit packing 变成复杂动态网络。
+
+工程 filelist：
+
+```text
+rtl/msgfunc/rce/scloud_msgfunc_rce.f
+```
+
+综合/elaboration 必须显式指定：
+
+```text
+top = scloud_msgfunc_rce_accel
+```
 
 ## 4. 新增 RCE opcode 建议
 
