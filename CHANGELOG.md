@@ -55,3 +55,11 @@ provided and report confidence is Low.
   incomplete pk/sk/ct/ss expected-value comparison, and an ss24 Encaps heap
   corruption mean that complete official KAT equivalence is not yet closed.
 - Added `doc/SCLOUD_HW_SW_KAT_VERIFICATION.md` as the verification record.
+
+### Documentation baseline refresh
+
+- Promoted the factor-8 plus exact 8-lane architecture to the current design
+  baseline throughout the technical and RCE integration documents.
+- Marked the 256-DSP and 128-DSP sections as historical optimization stages.
+- Replaced resource expectations with measured final results:
+  9,271 LUT, 4,471 FF, 48 DSP48, 7,351 BDD LUT, and 3,394 BDD FF.

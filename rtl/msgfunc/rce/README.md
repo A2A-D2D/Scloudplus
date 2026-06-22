@@ -76,8 +76,10 @@ range/equivalence proof for the local fixed-point representation.
 BDD16 and BDD32 additionally use one 8-lane `scloud_bdd_distance_seq` each.
 The lanes scan candidate A and candidate B in chunks and accumulate the same
 32-bit squared distances as the parallel trees. BDD8 and BDD4 keep their
-parallel distance trees to limit the latency increase. The expected structural
-DSP count is 48: 8 at BDD32, 8 at BDD16, and 32 in the resident BDD8 hierarchy.
+parallel distance trees to limit the latency increase. Vivado synthesis
+confirms 48 DSPs: 8 at BDD32, 8 at BDD16, and 32 in the resident BDD8
+hierarchy. The complete accelerator uses 9,271 LUTs and 4,471 FFs; the BDD
+accounts for 7,351 LUTs and 3,394 FFs.
 
 ## Filelist
 

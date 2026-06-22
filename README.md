@@ -2,6 +2,22 @@
 
 This repository keeps the active optimized Scloud+ MsgFunc/RCE work, the matrix-multiplication implementation, and the C/software reference chain required for bit-exact verification. Superseded RTL, duplicate snapshots, generated outputs, and obsolete tests are preserved under `archive/`.
 
+## Current RCE Baseline
+
+The active MsgFunc design uses one runtime-tau BDD32, Fast Scloud+
+unfold-factor-8 recursion reuse, and exact 8-lane sequential distance engines
+at BDD32/BDD16. BDD8/BDD4 retain parallel distance logic to bound latency.
+
+Vivado 2019.1 synthesis for XC7A200T, top `scloud_msgfunc_rce_accel`:
+
+| LUT | FF | DSP48 | BDD LUT | BDD FF |
+| ---: | ---: | ---: | ---: | ---: |
+| 9,271 | 4,471 | 48 | 7,351 | 3,394 |
+
+Relative to the initial fully parallel BDD, LUT is down 52.5% and DSP48 is
+down 81.25%. Timing and absolute power are not yet sign-off data because the
+standalone synthesis has no user clock or switching-activity constraints.
+
 ## Active RTL
 
 ```text

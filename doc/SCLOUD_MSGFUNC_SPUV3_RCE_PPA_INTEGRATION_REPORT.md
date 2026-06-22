@@ -1,6 +1,6 @@
 # Scloud+ MsgEnc/MsgDec 接入 SPUV3 RCE 说明
 
-本文记录 Scloud+ Barnes-Wall MsgEnc/MsgDec 加速器接入 SPUV3 RCE 的建议方案和当前仓库已实现的第一版 wrapper。目标是在保持 RCE 既有 SFR/DPRAM/RSA 类旁路模型的前提下，获得更好的 PPA 表现；不把 384/512-bit BW32 数据强行塞入 320-bit VPU VR 通路，也不复用 RSA 算法 datapath。
+本文记录 Scloud+ Barnes-Wall MsgEnc/MsgDec 加速器接入 SPUV3 RCE 的当前实现。目标是在保持 RCE 既有 SFR/DPRAM/RSA 类旁路模型的前提下获得较好的 PPA；不把 384/512-bit BW32 数据强行塞入 320-bit VPU VR 通路，也不复用 RSA 算法 datapath。当前基线已经完成 factor-8 半展开与 BDD32/BDD16 8-lane 精确距离共享，综合结果为 9,271 LUT、4,471 FF、48 DSP48。
 
 ## 1. 接入原则
 
@@ -19,7 +19,7 @@ Host / SPU core 配置 SFR
 第一版不建议走 VPU/VR，原因是：
 
 - SPUV3 VR 是 320-bit，Scloud+ BW32 Q block 是 32 x 12 = 384-bit，软件自然布局是 32 x uint16 = 512-bit，宽度不匹配。
-- MsgDecode 的 BDD 是递归选择、phi 变换和 distance tree，不是规则 SIMD lane 算术。
+- MsgDecode 的 BDD 是递归选择、phi 变换和分层共享距离计算，不是规则 SIMD lane 算术。
 - 每次 KEM 只有 2 或 4 个 BW32 block，VPU 指令拆分和 VR pack/unpack 开销摊销不划算。
 - 如果最后在 VPU 内部再挂一个 Scloud 专用 BDD 子单元，控制复杂度反而高于直接挂在 DPRAM 旁路。
 
@@ -35,8 +35,8 @@ Host / SPU core 配置 SFR
 | --- | --- | --- |
 | `rtl/msgfunc/rce/scloud_msgfunc_rce_accel.v` | 必须 | RCE-facing DPRAM wrapper，负责 op/tau/block 调度、DPRAM 读写、Q block pack/unpack、add/sub 融合 |
 | `rtl/msgfunc/param/scloud_msgfunc_param.v` | 必须 | C-model aligned MsgEnc/MsgDec 参数化主实现，包含 tau=3/4 bit packing、phi encode/decode、label/Q 转换 |
-| `rtl/msgfunc/bdd/scloud_bdd_seq_rt.v` | 必须 | Runtime-tau sequential BDD，tau3/tau4 共享一套 BW32/BW16/BW8/BW4 BDD datapath |
-| `rtl/msgfunc/bdd/scloud_bdd_recursive.v` | 必须 | BDD 公共 helper：phi、inv_phi、distance tree、round 基础模块 |
+| `rtl/msgfunc/bdd/scloud_bdd_seq_rt.v` | 必须 | Runtime-tau factor-8 BDD，BDD32/BDD16 单 child 四阶段复用，接入 8-lane distance engine |
+| `rtl/msgfunc/bdd/scloud_bdd_recursive.v` | 必须 | BDD 公共 helper：phi、inv_phi、并行/顺序 distance、round 基础模块 |
 
 这组文件负责把 Scloud+ 的单 BW32 block MsgEnc/MsgDec 接成 RCE 可启动的多 block DPRAM 加速器。
 
@@ -84,12 +84,15 @@ Host / SPU core 配置 SFR
 ```text
 scloud_msgenc_param tau=3
 scloud_msgenc_param tau=4
-scloud_bdd32_seq_rt       ; one shared runtime-tau BDD
+scloud_bdd32_seq_rt       ; one shared runtime-tau factor-8 BDD
+  scloud_bdd16_seq_rt     ; one child reused for YL/YR/ZA/ZB
+    scloud_bdd8_seq_rt    ; resident lower-level kernel
+  u_dist_seq x 2          ; exact 8-lane EdC at BDD32/BDD16
 q_to_label/phi_decode/label_to_msg tau=3
 q_to_label/phi_decode/label_to_msg tau=4
 ```
 
-其中 MsgEnc 基本是组合路径；MsgDec 的面积大头 BDD 已经合并为一套 runtime-tau datapath。tau3/tau4 仍各保留一套轻量 label/message 后处理，避免把 C-model aligned 的硬编码 bit packing 变成复杂动态网络。
+其中 MsgEnc 基本是组合路径；MsgDec 的面积大头 BDD 已经合并为一套 runtime-tau datapath，并通过 factor-8 层级复用和 8-lane 高层距离共享把 DSP 从 256 降到 48。tau3/tau4 仍各保留一套轻量 label/message 后处理，避免把 C-model aligned 的硬编码 bit packing 变成复杂动态网络。
 
 工程 filelist：
 
@@ -400,7 +403,7 @@ tb/rce/tb_scloud_msgfunc_rce_accel.v
 4. 接通 `done/busy/int` 状态，确认 host busy 期间不能访问 DPRAM。
 5. 再打开 `MSGENC_ADD`/`SUB_MSGDEC`，把 KEM 中间矩阵区域直接作为 q base。
 6. 加真实 RCE 仿真：2-block tau=3、2-block tau=4、4-block tau=3。
-7. 做综合看 BDD critical path；若时序紧，再对 distance tree 或 select 阶段加流水。
+7. 加入真实 RCE 时钟约束并做 subsystem 综合；只有约束后时序仍紧，才对 8-lane distance 或 select 阶段加流水。
 
 ## 13. 最新 PPA 与 HW/SW 验证状态
 

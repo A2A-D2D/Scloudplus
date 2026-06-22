@@ -630,23 +630,42 @@ TB_PASS scloud_msgfunc_rce_accel
 3. BDD 子层状态边界重定时
 4. DPRAM output register 对齐
 
-## 19. 当前设计结论
+## 19. 当前设计基线与设计理念
 
-当前方案采用：
+截至 2026-06-22，当前可综合、可回归的基线采用：
 
 ```text
 DPRAM side accelerator
 + Scloud 专用 MsgEnc/MsgDec datapath
-+ one shared runtime-tau BW32 BDD
++ one shared runtime-tau BDD32
++ Fast Scloud+ unfold-factor-8 recursion reuse
++ exact 8-lane sequential distance at BDD32/BDD16
++ parallel distance retained at BDD8/BDD4
 + tau3/tau4 lightweight post-processing
 + Encaps/Decaps fused op
 ```
 
-相比两套 tau3/tau4 MsgDec 的初版方案，当前设计减少了一整套 BW32 递归 BDD datapath。面积收益主要来自 BDD 共享；性能收益主要来自 `MSGENC_ADD`、`SUB_MSGDEC` 和 `dec_write_q=0` 减少 DPRAM 中间访问。
+设计取舍遵循四条原则：
 
-该方案适合作为 Scloud+ MsgEnc/MsgDec 接入 SPUV3 RCE 的第一版 PPA-oriented RTL 基线。
+1. **算法专用而非强塞 VPU**：384-bit BW32 数据和递归 BDD 不适合 320-bit VR 的规则 SIMD 数据流，因此采用 DPRAM 旁路专用核。
+2. **递归层级复用**：BDD32/BDD16 各保留一个 child，通过 YL/YR/ZA/ZB 四阶段调度复用常驻 BDD8 核，每次 BDD32 共 16 次 BDD8 调用。
+3. **高层共享、低层并行**：BDD32/BDD16 的 EdC 使用 8-lane 精确顺序平方累加；BDD8/BDD4 保持并行，避免面积最小化导致延迟过度增长。
+4. **精确性优先**：保留 12-bit 模差值、32-bit 距离累加和 strict `<` tie-break。论文中的 4-bit 平方只有在范围证明后才允许启用。
 
-## 20. 2026-06-22 Vivado 综合结果与下一步优化
+性能效率主要来自 `MSGENC_ADD`、`SUB_MSGDEC` 和 `dec_write_q=0`，它们减少 KEM 中间矩阵写回与再次读取。面积收益主要来自 runtime-tau BDD 共享、factor-8 半展开和 8-lane distance sharing。
+
+当前综合基线为：
+
+```text
+Total: 9,271 LUT / 4,471 FF / 48 DSP48
+BDD:   7,351 LUT / 3,394 FF / 48 DSP48
+```
+
+该方案是当前 Scloud+ MsgEnc/MsgDec 接入 SPUV3 RCE 的 PPA-oriented RTL 基线。
+
+## 20. 历史全并行综合结果与优化依据
+
+本章 20.1 至 20.4 保留最初 256 DSP 全并行版本的分析，用于解释优化来源，不代表当前实现。当前 48 DSP 实测结果以第 19 章和第 22.5 节为准。
 
 综合环境：
 
@@ -656,7 +675,7 @@ Device: xc7a200tfbg484-1
 Top: scloud_msgfunc_rce_accel
 ```
 
-### 20.1 资源结果
+### 20.1 初始全并行版本资源结果
 
 | 层级 | LUT | FF | DSP48 |
 | --- | ---: | ---: | ---: |
@@ -674,9 +693,9 @@ Top: scloud_msgfunc_rce_accel
 - tau3/tau4 后处理不是当前面积瓶颈。
 - 下一轮不应优先合并 MsgEnc 或 label packing，应优先重构 BDD distance 计算。
 
-### 20.2 DSP 产生原因
+### 20.2 初始版本 DSP 产生原因
 
-当前 `scloud_bdd_distance_tree` 为每个坐标实例化：
+初始 `scloud_bdd_distance_tree` 为每个坐标实例化：
 
 ```text
 diff = candidate - target
@@ -684,7 +703,7 @@ square = diff * diff
 distance = sum(square)
 ```
 
-BW32/BW16/BW8/BW4 的所有递归节点都保留两棵并行 distance tree。综合结果总计 256 个并行平方乘法器，因此使用 256 个 DSP48。
+初始 BW32/BW16/BW8/BW4 的所有递归节点都保留两棵并行 distance tree。综合结果总计 256 个并行平方乘法器，因此使用 256 个 DSP48。
 
 DRC 对这些 DSP 给出：
 
@@ -696,7 +715,7 @@ DPOP-2: 256 MREG warnings
 
 这说明当前乘法器既高度并行，又没有使用 DSP 内部 pipeline。
 
-### 20.3 推荐的面积优先重构
+### 20.3 当时提出的面积优先重构
 
 新增可复用顺序距离单元：
 
@@ -720,7 +739,7 @@ store dist_b
 select dist_a < dist_b
 ```
 
-推荐第一版使用：
+当时建议从以下配置开始评估：
 
 ```text
 DIST_LANES = 4
@@ -730,25 +749,25 @@ DIST_LANES = 4
 
 | 方案 | 乘法并行度 | DSP 预期 | 延迟 | 适用目标 |
 | --- | ---: | ---: | ---: | --- |
-| 当前全并行 | 256 | 256 | 最低 | 面积不敏感 |
+| 初始全并行 | 256 | 256 | 最低 | 面积不敏感 |
 | 每节点单 DSP | 约 15 | 约 15 | 较高 | 面积优先 |
 | 全局 4-lane shared engine | 4 | 约 4 | 高 | 极限面积 |
 | 4-lane/node 或分层共享 | 约 32-60 | 约 32-60 | 中 | 推荐折中 |
 
-最终 DSP 数取决于距离单元是在每个递归节点内复用，还是整个 BW32 engine 全局复用。
+最终落地方案选择 factor-8 分层复用加 BDD32/BDD16 各 8-lane distance engine，实测为 48 DSP。
 
-### 20.4 性能优先备选
+### 20.4 历史性能优先备选
 
 若必须保留 256 DSP 全并行结构，则应给平方乘法路径增加输入、MREG 和 PREG pipeline，以消除 DRC 的 DSP pipeline 警告并提高 Fmax。但该方案会继续占用 256 DSP，并增加寄存器和流水控制，不符合当前面积优先目标。
 
 ### 20.5 Timing 报告限制
 
-当前 timing report 显示：
+当前 48 DSP timing report 仍显示：
 
 ```text
 There are no user specified timing constraints.
 WNS/TNS = NA
-21,098 internal pins unconstrained
+4,471 register/latch pins have no constrained clock
 ```
 
 因此目前不能根据该报告判断实际 Fmax，也不能据此决定需要几级 pipeline。下一次综合至少需要：
@@ -761,7 +780,7 @@ create_clock -name clk -period 5.000 [get_ports clk]
 
 ### 20.6 Power 报告限制
 
-当前 power report 给出约 481W，但：
+当前 48 DSP power report 给出 213.135W，但：
 
 - Overall confidence 为 Low。
 - 没有 clock constraint。
@@ -775,21 +794,20 @@ create_clock -name clk -period 5.000 [get_ports clk]
 
 `NSTD-1`、`UCIO-1` 和 616 个外部端口来自单独综合 accelerator top。真实设计中这些端口是 RCE 内部信号，不应分配 FPGA 引脚。应使用内部 integration wrapper 或 OOC synthesis，而不是为 256-bit DPRAM 内部总线逐个添加板级 LOC。
 
-### 20.8 下一版优化优先级
+### 20.8 当前后续优化优先级
 
 1. 为综合加入真实 clock constraint。
-2. 将并行 `scloud_bdd_distance_tree` 改为顺序/多 lane 共享 distance engine。
-3. 将 BDD 增加 two-beat target load 接口，直接接收 DPRAM low/high Q half。
-4. 删除 wrapper 中重复的 384-bit `q_in_flat_r`/`q_aux_flat_r` 全块缓存，改为 half-beat 流式 add/sub/load。
-5. 把 `msg_word_r` 从 256-bit 缩减为实际需要的 96-bit。
-6. 先选择 4-lane 或分层共享方案，比较 DSP、LUT、FF 和 block latency。
-7. 为未运行阶段增加 operand isolation，降低 distance/phi 大总线翻转。
-8. 在真实 RCE subsystem 内重新综合，避免 standalone I/O 对功耗和 DRC 的干扰。
-9. 只有在共享 distance 后 timing 仍不满足时，才增加 DSP pipeline。
+2. 将 BDD 增加 two-beat target load 接口，直接接收 DPRAM low/high Q half。
+3. 删除 wrapper 中重复的 384-bit `q_in_flat_r`/`q_aux_flat_r` 全块缓存，改为 half-beat 流式 add/sub/load。
+4. 把 `msg_word_r` 从 256-bit 缩减为实际需要的 96-bit。
+5. 为未运行阶段增加 operand isolation，降低 distance/phi 大总线翻转。
+6. 在真实 RCE subsystem 内重新综合，避免 standalone I/O 对功耗和 DRC 的干扰。
+7. 只有在 48 DSP 共享方案加入真实约束后 timing 仍不满足时，才增加 DSP pipeline。
+8. 完成 openHiTLS `pk/sk/ct/ss` 逐字节 KAT 闭环并修复 ss24 Encaps heap corruption。
 
 ### 20.9 Wrapper 寄存器优化
 
-Wrapper 自身当前使用 1,083 FF，主要来源为：
+Wrapper 自身当前使用约 1,077 FF，主要来源为：
 
 ```text
 msg_word_r     = 256 bit，实际只需要 96 bit
@@ -851,11 +869,11 @@ scloud_bdd32_seq_rt
 
 因此每次 BDD32 共调用 BDD8 16 次。`scloud_msgfunc_rce_accel` 仍然是唯一接入 RCE 的算法顶层，SFR、DPRAM 和 start/busy/done 接口均不变化。
 
-### 21.3 面积与延迟预期
+### 21.3 半展开阶段的面积与延迟结果
 
 结构平方单元计数由 256 降为 128；BDD16 实例数由 2 降为 1，BDD8 由 4 降为 1，BDD4 由 8 降为 2。代价是 BDD 子调用串行化，块延迟增加。RTL 回归中 tau3 MSGENC/MSGDEC 与 tau4 MSGENC_ADD/SUB_MSGDEC 均通过。
 
-该数字是 RTL 结构计数，不替代 Vivado 重新综合结果。下一轮必须使用实际 RCE 时钟约束重新生成 utilization、timing 和 power 报告。
+该阶段随后由 Vivado 确认为 11,522 LUT、4,443 FF、128 DSP，并作为继续引入 8-lane distance sharing 的中间基线。
 
 ### 21.4 尚未照搬的 4-bit 平方优化
 
@@ -898,7 +916,7 @@ BDD32 EdC: 32 coordinates / 8 lanes x 2 candidates = 8 accumulate cycles
 
 加上启动和完成握手，RCE 两块端到端回归的总仿真时间由约 13,165 拍增加到约 14,525 拍，增幅约 10.3%。
 
-### 22.3 资源预期
+### 22.3 已实现资源结构
 
 ```text
 BDD32 distance: 64 DSP -> 8 DSP
@@ -907,7 +925,7 @@ BDD8 hierarchy: 保持 32 DSP
 Total: 128 DSP -> 48 DSP
 ```
 
-DSP 预期再下降 62.5%，相对最初 256 DSP 全并行版本下降 81.25%。共享引擎会增加候选/目标 chunk 选择 mux、累加寄存器和控制状态，因此 LUT/FF 的实际变化必须由新一轮 Vivado 综合确认。
+DSP 实测下降 62.5%，相对最初 256 DSP 全并行版本下降 81.25%。共享引擎增加了候选/目标 chunk 选择 mux、累加寄存器和控制状态，但总 LUT 仍由 11,522 下降到 9,271，FF 仅由 4,443 增加到 4,471。
 
 ### 22.4 验证结果
 
@@ -916,7 +934,7 @@ DSP 预期再下降 62.5%，相对最初 256 DSP 全并行版本下降 81.25%。
 - SFR 与矩阵乘法回归通过。
 - C-model aligned 的 ss16、ss24、ss32 自测全部通过。
 
-下一轮综合的层级检查点为：BDD32 和 BDD16 下各有一个 `u_dist_seq`，总 DSP48 应接近 48。若仍为 128，说明 Vivado 报告仍来自上一版网表。
+综合网表已确认 BDD32 和 BDD16 下各有一个 `u_dist_seq`，总 DSP48 为 48。
 
 ### 22.5 8-lane 版本综合实测结果
 
