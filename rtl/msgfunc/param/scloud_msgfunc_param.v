@@ -162,6 +162,169 @@ module scloud_msgfunc_phi_decode
 
 endmodule
 
+module scloud_msgfunc_phi_decode_layer
+#(
+    parameter COMPLEX_N   = 16,
+    parameter LABEL_WIDTH = 8,
+    parameter STAGE       = 0
+)
+(
+    input  wire [(2*COMPLEX_N*LABEL_WIDTH)-1:0] label_in_flat,
+    output wire [(2*COMPLEX_N*LABEL_WIDTH)-1:0] label_out_flat
+);
+
+    localparam BLOCK_COMPLEX = COMPLEX_N >> STAGE;
+    localparam HALF_COMPLEX  = BLOCK_COMPLEX / 2;
+    localparam BLOCK_COUNT   = 1 << STAGE;
+
+    genvar gb;
+    genvar gi;
+
+    generate
+        for (gb = 0; gb < BLOCK_COUNT; gb = gb + 1) begin : gen_block
+            for (gi = 0; gi < HALF_COMPLEX; gi = gi + 1) begin : gen_pair
+                localparam LEFT_COMPLEX  = (gb * BLOCK_COMPLEX) + gi;
+                localparam RIGHT_COMPLEX = LEFT_COMPLEX + HALF_COMPLEX;
+
+                assign label_out_flat[((2*LEFT_COMPLEX+0)*LABEL_WIDTH)+:LABEL_WIDTH] =
+                    label_in_flat[((2*LEFT_COMPLEX+0)*LABEL_WIDTH)+:LABEL_WIDTH];
+                assign label_out_flat[((2*LEFT_COMPLEX+1)*LABEL_WIDTH)+:LABEL_WIDTH] =
+                    label_in_flat[((2*LEFT_COMPLEX+1)*LABEL_WIDTH)+:LABEL_WIDTH];
+
+                scloud_msgfunc_inv_phi_pair #(
+                    .LABEL_WIDTH(LABEL_WIDTH)
+                ) u_pair (
+                    .a_re(label_in_flat[((2*LEFT_COMPLEX+0)*LABEL_WIDTH)+:LABEL_WIDTH]),
+                    .a_im(label_in_flat[((2*LEFT_COMPLEX+1)*LABEL_WIDTH)+:LABEL_WIDTH]),
+                    .y_re(label_in_flat[((2*RIGHT_COMPLEX+0)*LABEL_WIDTH)+:LABEL_WIDTH]),
+                    .y_im(label_in_flat[((2*RIGHT_COMPLEX+1)*LABEL_WIDTH)+:LABEL_WIDTH]),
+                    .b_re(label_out_flat[((2*RIGHT_COMPLEX+0)*LABEL_WIDTH)+:LABEL_WIDTH]),
+                    .b_im(label_out_flat[((2*RIGHT_COMPLEX+1)*LABEL_WIDTH)+:LABEL_WIDTH])
+                );
+            end
+        end
+    endgenerate
+
+endmodule
+
+module scloud_msgfunc_phi_decode_seq
+#(
+    parameter COMPLEX_N   = 16,
+    parameter LABEL_WIDTH = 8
+)
+(
+    input  wire [(2*COMPLEX_N*LABEL_WIDTH)-1:0] label_in_flat,
+    input  wire                                  clk,
+    input  wire                                  rst_n,
+    input  wire                                  start,
+    output wire                                  start_ready,
+    output reg                                   busy,
+    output reg                                   done,
+    output reg  [(2*COMPLEX_N*LABEL_WIDTH)-1:0] label_out_flat
+);
+
+    localparam FLAT_WIDTH = 2 * COMPLEX_N * LABEL_WIDTH;
+    localparam [2:0] ST_IDLE   = 3'd0;
+    localparam [2:0] ST_LEVEL1 = 3'd1;
+    localparam [2:0] ST_LEVEL2 = 3'd2;
+    localparam [2:0] ST_LEVEL3 = 3'd3;
+    localparam [2:0] ST_DONE   = 3'd4;
+
+    reg [2:0] state;
+    reg [FLAT_WIDTH-1:0] level0_r;
+    reg [FLAT_WIDTH-1:0] level1_r;
+    reg [FLAT_WIDTH-1:0] level2_r;
+
+    wire [FLAT_WIDTH-1:0] level0_w;
+    wire [FLAT_WIDTH-1:0] level1_w;
+    wire [FLAT_WIDTH-1:0] level2_w;
+    wire [FLAT_WIDTH-1:0] level3_w;
+
+    assign start_ready = (state == ST_IDLE);
+
+    scloud_msgfunc_phi_decode_layer #(
+        .COMPLEX_N  (COMPLEX_N),
+        .LABEL_WIDTH(LABEL_WIDTH),
+        .STAGE      (0)
+    ) u_level0 (
+        .label_in_flat (label_in_flat),
+        .label_out_flat(level0_w)
+    );
+
+    scloud_msgfunc_phi_decode_layer #(
+        .COMPLEX_N  (COMPLEX_N),
+        .LABEL_WIDTH(LABEL_WIDTH),
+        .STAGE      (1)
+    ) u_level1 (
+        .label_in_flat (level0_r),
+        .label_out_flat(level1_w)
+    );
+
+    scloud_msgfunc_phi_decode_layer #(
+        .COMPLEX_N  (COMPLEX_N),
+        .LABEL_WIDTH(LABEL_WIDTH),
+        .STAGE      (2)
+    ) u_level2 (
+        .label_in_flat (level1_r),
+        .label_out_flat(level2_w)
+    );
+
+    scloud_msgfunc_phi_decode_layer #(
+        .COMPLEX_N  (COMPLEX_N),
+        .LABEL_WIDTH(LABEL_WIDTH),
+        .STAGE      (3)
+    ) u_level3 (
+        .label_in_flat (level2_r),
+        .label_out_flat(level3_w)
+    );
+
+    /* Data stages are overwritten before use and do not need reset. */
+    always @(posedge clk) begin
+        if ((state == ST_IDLE) && start)
+            level0_r <= level0_w;
+        if (state == ST_LEVEL1)
+            level1_r <= level1_w;
+        if (state == ST_LEVEL2)
+            level2_r <= level2_w;
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state          <= ST_IDLE;
+            busy           <= 1'b0;
+            done           <= 1'b0;
+            label_out_flat <= {FLAT_WIDTH{1'b0}};
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start) begin
+                        busy  <= 1'b1;
+                        state <= ST_LEVEL1;
+                    end
+                end
+                ST_LEVEL1: state <= ST_LEVEL2;
+                ST_LEVEL2: state <= ST_LEVEL3;
+                ST_LEVEL3: begin
+                    label_out_flat <= level3_w;
+                    state          <= ST_DONE;
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule
+
 module scloud_msgfunc_msg_to_label
 #(
     parameter COMPLEX_N     = 16,

@@ -83,6 +83,8 @@ module scloud_msgfunc_rce_accel
     localparam [4:0] ST_NEXT_BLOCK = 5'd16;
     localparam [4:0] ST_DONE       = 5'd17;
     localparam [4:0] ST_PREP_ENC   = 5'd18;
+    localparam [4:0] ST_START_POST = 5'd19;
+    localparam [4:0] ST_WAIT_POST  = 5'd20;
 
     reg [4:0]                  state;
     reg [1:0]                  op_r;
@@ -129,6 +131,14 @@ module scloud_msgfunc_rce_accel
     wire [Q_HALF_BITS-1:0]   dec_write_half;
     wire [Q_HALF_BITS-1:0]   q_write_half;
     wire [DPRAM_ADDR_WIDTH-1:0] block_q_offset;
+    wire                     post_tau3_ready;
+    wire                     post_tau4_ready;
+    wire                     post_tau3_done;
+    wire                     post_tau4_done;
+    wire                     post_selected_ready;
+    wire                     post_selected_done;
+    wire                     post_tau3_start;
+    wire                     post_tau4_start;
 
     assign start_ready = (state == ST_IDLE);
 
@@ -147,6 +157,12 @@ module scloud_msgfunc_rce_accel
                             {{(TAU4_MSG_BITS-TAU3_MSG_BITS){1'b0}}, dec_tau3_msg};
     assign dec_selected_ready = dec_rt_ready;
     assign dec_selected_done  = dec_rt_done;
+    assign post_selected_ready = tau_sel_r ? post_tau4_ready : post_tau3_ready;
+    assign post_selected_done  = tau_sel_r ? post_tau4_done : post_tau3_done;
+    assign post_tau3_start = (state == ST_START_POST) && !tau_sel_r &&
+                             post_tau3_ready;
+    assign post_tau4_start = (state == ST_START_POST) && tau_sel_r &&
+                             post_tau4_ready;
     assign enc_write_half = (state == ST_WRITE_Q1) ?
                             enc_selected_flat[Q_HALF_BITS+:Q_HALF_BITS] :
                             enc_selected_flat[0+:Q_HALF_BITS];
@@ -263,11 +279,17 @@ module scloud_msgfunc_rce_accel
         .label_flat(quant_label_tau3_flat)
     );
 
-    scloud_msgfunc_phi_decode #(
+    scloud_msgfunc_phi_decode_seq #(
         .COMPLEX_N  (16),
         .LABEL_WIDTH(7)
     ) u_phi_decode_tau3 (
         .label_in_flat (quant_label_tau3_flat),
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .start         (post_tau3_start),
+        .start_ready   (post_tau3_ready),
+        .busy          (),
+        .done          (post_tau3_done),
         .label_out_flat(raw_label_tau3_flat)
     );
 
@@ -292,11 +314,17 @@ module scloud_msgfunc_rce_accel
         .label_flat(quant_label_tau4_flat)
     );
 
-    scloud_msgfunc_phi_decode #(
+    scloud_msgfunc_phi_decode_seq #(
         .COMPLEX_N  (16),
         .LABEL_WIDTH(8)
     ) u_phi_decode_tau4 (
         .label_in_flat (quant_label_tau4_flat),
+        .clk           (clk),
+        .rst_n         (rst_n),
+        .start         (post_tau4_start),
+        .start_ready   (post_tau4_ready),
+        .busy          (),
+        .done          (post_tau4_done),
         .label_out_flat(raw_label_tau4_flat)
     );
 
@@ -516,7 +544,16 @@ module scloud_msgfunc_rce_accel
                 end
                 ST_WAIT_DEC: begin
                     if (dec_selected_done) begin
-                        msg_result_r    <= dec_msg_padded;
+                        state <= ST_START_POST;
+                    end
+                end
+                ST_START_POST: begin
+                    if (post_selected_ready)
+                        state <= ST_WAIT_POST;
+                end
+                ST_WAIT_POST: begin
+                    if (post_selected_done) begin
+                        msg_result_r <= dec_msg_padded;
                         if (op_writes_q)
                             state <= ST_WRITE_Q0;
                         else

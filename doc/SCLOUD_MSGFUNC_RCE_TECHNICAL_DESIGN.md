@@ -966,6 +966,12 @@ BDD8 流水后的综合结果为 8,877 LUT、5,008 FF、40 DSP，WNS 改善到 -
 
 因此 BDD4 的两棵四坐标组合距离树也改用 `scloud_bdd_distance_pair_pipe`，通过已有 start/done 握手向上层传播固定延迟。该改动不增加 DSP，不修改模差值、距离位宽或 tie-break；目标是消除当前设计最后一段 `phi -> DSP -> sum -> compare` 单拍组合链。BDD4 对递归 tau3/tau4 参考的 100 组随机等价测试通过；更新后的时序与资源结果仍以重新综合报告为准。
 
+### 22.8 MsgDec 四级 phi 后处理流水
+
+BDD4 流水后的综合结果为 8,850 LUT、5,546 FF、40 DSP，WNS 从 -11.392 ns 改善到 -6.627 ns，TNS 从 -3006.201 ns 改善到 -2671.024 ns。最差路径已经离开 BDD distance 层级，转移到 BDD32 输出至 `msg_result_r` 的 tau4 后处理：一拍内依次穿过 Q-to-label、四层递归 inverse-phi、label reduction 和消息寄存，共 19 级逻辑、11.476 ns 数据路径。
+
+新增 `scloud_msgfunc_phi_decode_layer` 与 `scloud_msgfunc_phi_decode_seq`，按 Barnes-Wall 递归深度将四层 inverse-phi 各自放入独立时钟拍。RCE 只启动当前 tau 对应的流水，完成后再经 `label_to_msg` 写入 96-bit `msg_result_r`。每个解码块增加约 5 拍固定延迟，不改变 Q/label packing、模回绕、消息映射、DPRAM 格式或外部接口。tau3/tau4 流水与原组合递归实现的 200 组随机标签等价测试及 RCE 端到端回归均通过；更新后的 WNS/TNS 仍以重新综合为准。
+
 ## 23. DS 辅助 HW/SW KAT 验证状态
 
 DS 辅助加入了 openHiTLS KAT 解析、SW HAL、KEM 功能模型和 RTL cosim 验证链。KAT 输入共 9 组，ss16、ss24、ss32 各 3 组。

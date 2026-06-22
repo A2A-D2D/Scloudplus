@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-06-22 - Four-stage MsgDec phi pipeline
+
+### Constrained synthesis trigger
+
+- The BDD4 pipeline synthesis produced 8,850 LUT, 5,546 FF, and 40 DSP48
+  blocks. WNS improved from -11.392 ns to -6.627 ns and TNS improved from
+  -3006.201 ns to -2671.024 ns.
+- The worst 11.476 ns path left the BDD distance hierarchy and moved to
+  MsgDec post-processing. It crossed Q-to-label extraction, all four recursive
+  tau4 inverse-phi levels, label reduction, and `msg_result_r` capture in one
+  cycle.
+
+### Changed
+
+- Added `scloud_msgfunc_phi_decode_layer` and
+  `scloud_msgfunc_phi_decode_seq`. The four recursive inverse-phi levels now
+  have explicit register boundaries.
+- Added post-processing start/wait states to the RCE wrapper. Only the
+  selected tau3 or tau4 pipeline runs for each block; the unselected path
+  remains idle.
+- Kept Q/label packing, fixed-width wrap behavior, message mapping, DPRAM
+  format, and the external accelerator interface unchanged.
+
+### Latency and verification
+
+- The post-processing pipeline adds about five fixed cycles per decoded BW32
+  block.
+- Sequential tau3/tau4 phi decoding matched the original recursive
+  combinational implementation for 200 random label vectors.
+- RCE tau3/tau4 two-block fused and non-fused operations and tau3 four-block
+  decode/writeback pass.
+- Post-change timing and utilization require a new constrained synthesis.
+
 ## 2026-06-22 - BDD4 final distance-chain pipeline
 
 ### Constrained synthesis trigger
