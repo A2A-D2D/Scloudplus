@@ -73,6 +73,12 @@ the recursive kernels but intentionally retains exact 12-bit squared-distance
 arithmetic. The paper's 4-bit square optimization remains gated on a formal
 range/equivalence proof for the local fixed-point representation.
 
+BDD32 loads one target through two 192-bit beats with `valid/ready`, a half
+select, and a two-bit loaded mask. The wrapper converts each 256-bit DPRAM word
+to one packed half and does not keep full Q-input or Q-auxiliary copies.
+`SUB_MSGDEC` visits Q0/AUX0/Q1/AUX1 and uses one 192-bit scratch register;
+`MSGENC_ADD` adds and writes Q0 and Q1 independently.
+
 BDD16 and BDD32 share one 8-lane `scloud_bdd_distance_seq`. Their distance
 phases are mutually exclusive in the resident hierarchy. BDD16 requests are
 zero-extended to the shared 32-coordinate engine; the extra coordinates add

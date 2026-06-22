@@ -1,4 +1,4 @@
-# Scloud+ MsgFunc RCE standalone timing constraints
+# Scloud+ MsgFunc RCE standalone Vivado timing constraints
 #
 # Target: 200 MHz RCE clock (5.000 ns period), as recorded in the active
 # technical design. If the integrated SPUV3 RCE uses another frequency,

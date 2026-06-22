@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-06-22 - Two-beat BDD target and half-streamed Q datapath
+
+### Changed
+
+- Replaced the standalone `.sdc` file with the Vivado-native
+  `constraints/scloud_msgfunc_rce.xdc` 200 MHz clock constraint.
+- Replaced the flat 384-bit BDD32 target input with two independently selected
+  192-bit valid/ready target-half beats. BDD32 keeps the only required full
+  target copy internally and will not accept `start` until both halves arrive.
+- Removed the wrapper's 384-bit `q_in_flat_r` and `q_aux_flat_r` registers.
+  One 192-bit `q_half_r` now serves per-half `MSGENC_ADD` and `SUB_MSGDEC`.
+- Changed `SUB_MSGDEC` scheduling to Q0/AUX0/Q1/AUX1 so each subtracted half
+  is loaded directly into BDD32 before the scratch register is reused.
+- Changed `MSGENC_ADD` to read, add, and write each half independently rather
+  than constructing a 384-bit add result.
+- Preserved 12-bit lane wrap, C-model/DPRAM packing, and all external RCE
+  accelerator ports.
+
+### Expected PPA effect
+
+- Removes 768 wrapper Q-cache bits and adds one 192-bit scratch half, for a
+  net reduction of 576 state bits before synthesis cleanup. This is an RTL
+  estimate, not a new FF utilization report.
+
+### Verified
+
+- Two-beat BDD32 matched the fully parallel tau3/tau4 references on 20 random
+  targets, including alternating low-first and high-first load order.
+- Tau3 two-block and four-block MsgEnc/MsgDec passed.
+- Tau4 two-block MsgEncAdd/SubMsgDec passed with per-half modular add/sub
+  relation checks.
+- `dec_write_q=1` rounded-Q writeback matched encoded Q over four blocks.
+
 ## 2026-06-22 - Hierarchical distance-engine sharing
 
 ### Changed

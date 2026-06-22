@@ -53,6 +53,7 @@ scloud_msgfunc_rce_accel
   |-- scloud_msgenc_param, tau=3
   |-- scloud_msgenc_param, tau=4
   |-- scloud_bdd32_seq_rt
+  |     |-- two-beat 192-bit target loader and one internal 384-bit target
   |     |-- one scloud_bdd16_seq_rt child, reused for YL/YR/ZA/ZB
   |     |     `-- one resident scloud_bdd8_seq_rt
   |     |           `-- two parallel scloud_bdd4_seq_rt children
@@ -88,6 +89,11 @@ The wrapper supports four operations:
 Payload moves through 256-bit DPRAM words. One BW32 Q block contains 32
 12-bit coordinates and occupies two DPRAM words. Control comes from decoded
 SFR fields: op, tau, block count, base addresses, start, and `dec_write_q`.
+
+The wrapper streams Q as 192-bit packed halves. BDD32 accepts low/high target
+beats through valid/ready and owns the only full 384-bit target register.
+`SUB_MSGDEC` retains one Q half while reading the matching auxiliary half;
+the wrapper must not restore full `q_in_flat_r` or `q_aux_flat_r` caches.
 
 Fused operations are part of the PPA design:
 
@@ -125,6 +131,7 @@ rtl/msgfunc/param/scloud_msgfunc_param.v
 rtl/msgfunc/rce/scloud_msgfunc_rce_accel.v
 rtl/msgfunc/rce/spuv3_cfg_sfr_scloud.v
 rtl/msgfunc/rce/scloud_msgfunc_rce.f
+constraints/scloud_msgfunc_rce.xdc
 ```
 
 Matrix RTL:

@@ -10,8 +10,12 @@ module tb_scloud_bdd32_seq_rt;
     reg rst_n;
     reg start;
     reg tau_sel;
+    reg target_half_valid;
+    reg target_half_sel;
+    reg [(16*Q_WIDTH)-1:0] target_half_data;
     reg [(COORDS*Q_WIDTH)-1:0] target_flat;
 
+    wire target_half_ready;
     wire start_ready;
     wire done;
     wire [(COORDS*Q_WIDTH)-1:0] decoded_flat;
@@ -26,15 +30,18 @@ module tb_scloud_bdd32_seq_rt;
     always #5 clk = ~clk;
 
     scloud_bdd32_seq_rt #(.Q_WIDTH(Q_WIDTH)) dut (
-        .target_flat (target_flat),
-        .tau_sel     (tau_sel),
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .start       (start),
-        .start_ready (start_ready),
-        .busy        (),
-        .done        (done),
-        .decoded_flat(decoded_flat)
+        .target_half_data (target_half_data),
+        .target_half_valid(target_half_valid),
+        .target_half_sel  (target_half_sel),
+        .target_half_ready(target_half_ready),
+        .tau_sel          (tau_sel),
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .start            (start),
+        .start_ready      (start_ready),
+        .busy             (),
+        .done             (done),
+        .decoded_flat     (decoded_flat)
     );
 
     scloud_bdd_recursive #(
@@ -57,6 +64,31 @@ module tb_scloud_bdd32_seq_rt;
 
     task run_case;
         begin
+            while (!target_half_ready) @(posedge clk);
+            @(negedge clk);
+            target_half_sel = test_index[1] ? 1'b1 : 1'b0;
+            target_half_data = target_half_sel ?
+                               target_flat[(16*Q_WIDTH)+:(16*Q_WIDTH)] :
+                               target_flat[0+:(16*Q_WIDTH)];
+            target_half_valid = 1'b1;
+            @(negedge clk);
+            target_half_valid = 1'b0;
+
+            if (start_ready) begin
+                error_count = error_count + 1;
+                $display("FAIL start_ready after one half case=%0d", test_index);
+            end
+
+            while (!target_half_ready) @(posedge clk);
+            @(negedge clk);
+            target_half_sel = test_index[1] ? 1'b0 : 1'b1;
+            target_half_data = target_half_sel ?
+                               target_flat[(16*Q_WIDTH)+:(16*Q_WIDTH)] :
+                               target_flat[0+:(16*Q_WIDTH)];
+            target_half_valid = 1'b1;
+            @(negedge clk);
+            target_half_valid = 1'b0;
+
             while (!start_ready) @(posedge clk);
             @(negedge clk);
             start = 1'b1;
@@ -87,6 +119,9 @@ module tb_scloud_bdd32_seq_rt;
         rst_n = 1'b0;
         start = 1'b0;
         tau_sel = 1'b0;
+        target_half_valid = 1'b0;
+        target_half_sel = 1'b0;
+        target_half_data = {(16*Q_WIDTH){1'b0}};
         target_flat = {(COORDS*Q_WIDTH){1'b0}};
         error_count = 0;
         cycle_count = 0;

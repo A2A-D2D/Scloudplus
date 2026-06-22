@@ -9,6 +9,10 @@ unfold-factor-8 recursion reuse, and one exact 8-lane sequential distance
 engine shared by BDD32/BDD16. BDD8/BDD4 retain parallel distance logic to
 bound latency.
 
+BDD32 now accepts its 384-bit target as two 192-bit beats. The RCE wrapper
+streams Q halves directly from DPRAM and retains only one 192-bit scratch half
+for fused add/sub operations instead of two full 384-bit Q caches.
+
 Vivado 2019.1 synthesis for XC7A200T, top `scloud_msgfunc_rce_accel`:
 
 | LUT | FF | DSP48 | BDD LUT | BDD FF |
@@ -48,6 +52,8 @@ rtl/
     scloudplus_bmm_block.v
     scloudplus_bmm_pe.v
     scloudplus_block_add.v
+constraints/
+  scloud_msgfunc_rce.xdc           # 200 MHz standalone Vivado constraint
 ```
 
 ## Active Verification

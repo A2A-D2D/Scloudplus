@@ -741,7 +741,10 @@ module scloud_bdd32_seq_rt
     parameter Q_WIDTH = 12
 )
 (
-    input  wire [(32*Q_WIDTH)-1:0] target_flat,
+    input  wire [(16*Q_WIDTH)-1:0] target_half_data,
+    input  wire                    target_half_valid,
+    input  wire                    target_half_sel,
+    output wire                    target_half_ready,
     input  wire                    tau_sel,
     input  wire                    clk,
     input  wire                    rst_n,
@@ -773,6 +776,7 @@ module scloud_bdd32_seq_rt
 
     reg [3:0] state;
     reg tau_sel_r;
+    reg [1:0] target_loaded;
 
     reg [TOTAL_WIDTH-1:0] target_r;
     reg [HALF_WIDTH-1:0]  target_l_r;
@@ -818,13 +822,15 @@ module scloud_bdd32_seq_rt
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE) && child_ready;
+    assign target_half_ready = (state == ST_IDLE) && !start;
+    assign start_ready = (state == ST_IDLE) && child_ready &&
+                         (target_loaded == 2'b11);
     assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
     assign child_start = ((state == ST_IDLE) && start_ready && start) ||
                          (state == ST_START_YR) ||
                          (state == ST_START_ZA) ||
                          (state == ST_START_ZB);
-    assign child_target = (state == ST_IDLE)     ? target_flat[0+:HALF_WIDTH] :
+    assign child_target = (state == ST_IDLE)     ? target_r[0+:HALF_WIDTH] :
                           (state == ST_START_YR) ? target_r_r :
                           (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
@@ -923,6 +929,7 @@ module scloud_bdd32_seq_rt
         if (!rst_n) begin
             state        <= ST_IDLE;
             tau_sel_r    <= 1'b0;
+            target_loaded <= 2'b00;
             target_r     <= {TOTAL_WIDTH{1'b0}};
             target_l_r   <= {HALF_WIDTH{1'b0}};
             target_r_r   <= {HALF_WIDTH{1'b0}};
@@ -938,6 +945,15 @@ module scloud_bdd32_seq_rt
             done         <= 1'b0;
         end else begin
             done <= 1'b0;
+            if (target_half_valid && target_half_ready) begin
+                if (target_half_sel) begin
+                    target_r[HALF_WIDTH+:HALF_WIDTH] <= target_half_data;
+                    target_loaded[1] <= 1'b1;
+                end else begin
+                    target_r[0+:HALF_WIDTH] <= target_half_data;
+                    target_loaded[0] <= 1'b1;
+                end
+            end
             if (child_dist_start)
                 dist_owner_child <= 1'b1;
             else if (shared_dist_done)
@@ -947,9 +963,9 @@ module scloud_bdd32_seq_rt
                     busy <= 1'b0;
                     if (start_ready && start) begin
                         tau_sel_r  <= tau_sel;
-                        target_r   <= target_flat;
-                        target_l_r <= target_flat[0+:HALF_WIDTH];
-                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
+                        target_loaded <= 2'b00;
+                        target_l_r <= target_r[0+:HALF_WIDTH];
+                        target_r_r <= target_r[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
                         state      <= ST_WAIT_YL;
                     end

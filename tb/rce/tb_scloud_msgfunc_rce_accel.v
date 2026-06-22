@@ -219,6 +219,63 @@ module tb_scloud_msgfunc_rce_accel;
         end
     endtask
 
+    task check_fused_q_block;
+        input integer block_index;
+        reg [255:0] aux_word;
+        reg [255:0] enc_word;
+        reg [255:0] add_word;
+        reg [11:0] aux_q;
+        reg [11:0] enc_q;
+        reg [11:0] add_q;
+        reg [12:0] expected_sum;
+        integer half_index;
+        integer lane_index;
+        begin
+            for (half_index = 0; half_index < 2;
+                 half_index = half_index + 1) begin
+                aux_word = dpram_mem[Q_AUX_BASE + (block_index * 2) + half_index];
+                enc_word = dpram_mem[Q_OUT_BASE + (block_index * 2) + half_index];
+                add_word = dpram_mem[Q_ADD_BASE + (block_index * 2) + half_index];
+                for (lane_index = 0; lane_index < 16;
+                     lane_index = lane_index + 1) begin
+                    aux_q = aux_word[(lane_index*16)+:12];
+                    enc_q = enc_word[(lane_index*16)+:12];
+                    add_q = add_word[(lane_index*16)+:12];
+                    expected_sum = {1'b0, aux_q} + {1'b0, enc_q};
+                    if (add_q !== expected_sum[11:0]) begin
+                        error_count = error_count + 1;
+                        $display("FAIL fused add block=%0d half=%0d lane=%0d got=%h expected=%h",
+                                 block_index, half_index, lane_index,
+                                 add_q, expected_sum[11:0]);
+                    end
+                    if ((add_q - aux_q) !== enc_q) begin
+                        error_count = error_count + 1;
+                        $display("FAIL fused sub relation block=%0d half=%0d lane=%0d",
+                                 block_index, half_index, lane_index);
+                    end
+                end
+            end
+        end
+    endtask
+
+    task check_q_block_equal;
+        input [ADDR_WIDTH-1:0] actual_base;
+        input [ADDR_WIDTH-1:0] expected_base;
+        input integer block_index;
+        integer half_index;
+        begin
+            for (half_index = 0; half_index < 2;
+                 half_index = half_index + 1) begin
+                if (dpram_mem[actual_base + (block_index * 2) + half_index] !==
+                    dpram_mem[expected_base + (block_index * 2) + half_index]) begin
+                    error_count = error_count + 1;
+                    $display("FAIL q compare block=%0d half=%0d", block_index,
+                             half_index);
+                end
+            end
+        end
+    endtask
+
     initial begin
         $dumpfile("tb_scloud_msgfunc_rce_accel.vcd");
         $dumpvars(0, tb_scloud_msgfunc_rce_accel);
@@ -264,14 +321,40 @@ module tb_scloud_msgfunc_rce_accel;
             dpram_mem[Q_IN_BASE + (b * 2)] = dpram_mem[Q_AUX_BASE + (b * 2)];
             dpram_mem[Q_IN_BASE + (b * 2) + 1] = dpram_mem[Q_AUX_BASE + (b * 2) + 1];
         end
+        run_accel(OP_MSGENC, 1'b1, 3'd2,
+                  1'b0,
+                  MSG_IN_BASE, MSG_OUT2_BASE, Q_IN_BASE, Q_AUX_BASE, Q_OUT_BASE);
         run_accel(OP_MSGENC_ADD, 1'b1, 3'd2,
                   1'b0,
                   MSG_IN_BASE, MSG_OUT2_BASE, Q_IN_BASE, Q_AUX_BASE, Q_ADD_BASE);
+        check_fused_q_block(0);
+        check_fused_q_block(1);
         run_accel(OP_SUB_MSGDEC, 1'b1, 3'd2,
                   1'b0,
                   MSG_IN_BASE, MSG_OUT2_BASE, Q_ADD_BASE, Q_AUX_BASE, Q_ROUND_BASE);
         check_tau4_msg(0, MSG_OUT2_BASE, 96'h13579bdffdb97531a5a55a5a);
         check_tau4_msg(1, MSG_OUT2_BASE, 96'hc001d00d0123456789abcdef);
+
+        $display("TEST 3: tau3 four-block decode with rounded-Q writeback");
+        clear_mem;
+        write_tau3_msg(0, 64'h0001020304050607);
+        write_tau3_msg(1, 64'h1021324354657687);
+        write_tau3_msg(2, 64'h89abcdef01234567);
+        write_tau3_msg(3, 64'hfedcba9876543210);
+        run_accel(OP_MSGENC, 1'b0, 3'd4,
+                  1'b0,
+                  MSG_IN_BASE, MSG_OUT_BASE, Q_IN_BASE, Q_AUX_BASE, Q_OUT_BASE);
+        run_accel(OP_MSGDEC, 1'b0, 3'd4,
+                  1'b1,
+                  MSG_IN_BASE, MSG_OUT_BASE, Q_OUT_BASE, Q_AUX_BASE, Q_ROUND_BASE);
+        check_tau3_msg(0, MSG_OUT_BASE, 64'h0001020304050607);
+        check_tau3_msg(1, MSG_OUT_BASE, 64'h1021324354657687);
+        check_tau3_msg(2, MSG_OUT_BASE, 64'h89abcdef01234567);
+        check_tau3_msg(3, MSG_OUT_BASE, 64'hfedcba9876543210);
+        check_q_block_equal(Q_ROUND_BASE, Q_OUT_BASE, 0);
+        check_q_block_equal(Q_ROUND_BASE, Q_OUT_BASE, 1);
+        check_q_block_equal(Q_ROUND_BASE, Q_OUT_BASE, 2);
+        check_q_block_equal(Q_ROUND_BASE, Q_OUT_BASE, 3);
 
         if (error_count == 0)
             $display("TB_PASS scloud_msgfunc_rce_accel");
