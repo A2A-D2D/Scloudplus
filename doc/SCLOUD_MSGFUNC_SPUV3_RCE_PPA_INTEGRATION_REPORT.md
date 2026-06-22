@@ -87,10 +87,15 @@ scloud_msgenc_param tau=4
 scloud_bdd32_seq_rt       ; one shared runtime-tau factor-8 BDD
   scloud_bdd16_seq_rt     ; one child reused for YL/YR/ZA/ZB
     scloud_bdd8_seq_rt    ; resident lower-level kernel
-  u_dist_seq x 2          ; exact 8-lane EdC at BDD32/BDD16
+  u_dist_seq x 1          ; exact 8-lane EdC shared by BDD32/BDD16
 q_to_label/phi_decode/label_to_msg tau=3
 q_to_label/phi_decode/label_to_msg tau=4
 ```
+
+> 2026-06-22 active-RTL update: BDD32 now owns the only high-level 8-lane
+> distance engine and services zero-extended BDD16 requests. The previously
+> measured 48-DSP result predates this change. About 40 DSP48s are expected,
+> but a new Vivado run is required before that estimate becomes a measurement.
 
 其中 MsgEnc 基本是组合路径；MsgDec 的面积大头 BDD 已经合并为一套 runtime-tau datapath，并通过 factor-8 层级复用和 8-lane 高层距离共享把 DSP 从 256 降到 48。tau3/tau4 仍各保留一套轻量 label/message 后处理，避免把 C-model aligned 的硬编码 bit packing 变成复杂动态网络。
 

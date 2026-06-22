@@ -56,8 +56,7 @@ scloud_msgfunc_rce_accel
   |     |-- one scloud_bdd16_seq_rt child, reused for YL/YR/ZA/ZB
   |     |     `-- one resident scloud_bdd8_seq_rt
   |     |           `-- two parallel scloud_bdd4_seq_rt children
-  |     |-- 8-lane exact sequential distance engine at BDD32
-  |     `-- 8-lane exact sequential distance engine at BDD16
+  |     `-- one 8-lane exact sequential distance engine shared by BDD32/BDD16
   |-- tau3 q_to_label / phi_decode / label_to_msg
   `-- tau4 q_to_label / phi_decode / label_to_msg
 ```
@@ -67,7 +66,8 @@ The BDD follows the Fast Scloud+ unfold-factor-8 area/latency trade-off:
 - One runtime-tau datapath serves tau3 and tau4.
 - BDD32 and BDD16 each serialize four child calls: YL, YR, ZA, and ZB.
 - A resident BDD8 kernel is called 16 times per BDD32 operation.
-- BDD32 and BDD16 each use one exact 8-lane sequential distance engine.
+- BDD32 and BDD16 share one exact 8-lane sequential distance engine. BDD16
+  requests are zero-extended into its 32-coordinate input.
 - BDD8 and BDD4 retain parallel distance logic to avoid excessive latency.
 - Distance arithmetic remains 12-bit squared difference with 32-bit sum.
 - Candidate selection must remain strict `<`; a tie selects candidate B.
@@ -161,8 +161,9 @@ Vivado 2019.1, XC7A200T, synthesis top `scloud_msgfunc_rce_accel`:
 | BDD LUT | 7,351 | 15,760 | -53.4% |
 | BDD FF | 3,394 | 5,967 | -43.1% |
 
-The 48 DSPs are distributed as 8 at BDD32, 8 at BDD16, and 32 in the
-resident BDD8 hierarchy.
+The last measured 48-DSP baseline used 8 at BDD32, 8 at BDD16, and 32 in the
+resident BDD8 hierarchy. The active shared-engine RTL removes the BDD16 copy,
+so about 40 DSP48s are expected; this remains an estimate until Vivado is rerun.
 
 The reported 213.135 W power is Low confidence and not sign-off data. The
 standalone design has no user clock constraint or switching activity and
@@ -206,11 +207,22 @@ iverilog -g2001 -Wall -o build/tb_bdd_dist.vvp \
 vvp build/tb_bdd_dist.vvp
 ```
 
+Run shared BDD32 hierarchy equivalence:
+
+```bash
+iverilog -g2001 -Wall -o build/tb_bdd32_rt.vvp \
+  rtl/msgfunc/bdd/scloud_bdd_recursive.v \
+  rtl/msgfunc/bdd/scloud_bdd_seq_rt.v \
+  tb/rce/tb_scloud_bdd32_seq_rt.v
+vvp build/tb_bdd32_rt.vvp
+```
+
 Expected primary markers:
 
 ```text
 TB_PASS scloud_msgfunc_rce_accel
 TB_PASS scloud_bdd_distance_seq cases=200
+TB_PASS scloud_bdd32_seq_rt cases=20
 TB_PASS spuv3_cfg_sfr_scloud
 TB_PASS scloudplus_bmm
 === ALL SELF-TESTS PASSED ===

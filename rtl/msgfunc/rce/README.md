@@ -73,13 +73,15 @@ the recursive kernels but intentionally retains exact 12-bit squared-distance
 arithmetic. The paper's 4-bit square optimization remains gated on a formal
 range/equivalence proof for the local fixed-point representation.
 
-BDD16 and BDD32 additionally use one 8-lane `scloud_bdd_distance_seq` each.
-The lanes scan candidate A and candidate B in chunks and accumulate the same
-32-bit squared distances as the parallel trees. BDD8 and BDD4 keep their
-parallel distance trees to limit the latency increase. Vivado synthesis
-confirms 48 DSPs: 8 at BDD32, 8 at BDD16, and 32 in the resident BDD8
-hierarchy. The complete accelerator uses 9,271 LUTs and 4,471 FFs; the BDD
-accounts for 7,351 LUTs and 3,394 FFs.
+BDD16 and BDD32 share one 8-lane `scloud_bdd_distance_seq`. Their distance
+phases are mutually exclusive in the resident hierarchy. BDD16 requests are
+zero-extended to the shared 32-coordinate engine; the extra coordinates add
+zero to both candidates. The lanes scan candidate A and candidate B in chunks
+and accumulate the same 32-bit squared distances as the parallel trees. BDD8
+and BDD4 keep their parallel distance trees to limit the latency increase.
+The last measured Vivado baseline had 48 DSPs. The shared-engine RTL removes
+one 8-lane copy, so about 40 DSP48s are expected, but that figure is not yet a
+new synthesis measurement.
 
 ## Filelist
 

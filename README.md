@@ -5,14 +5,20 @@ This repository keeps the active optimized Scloud+ MsgFunc/RCE work, the matrix-
 ## Current RCE Baseline
 
 The active MsgFunc design uses one runtime-tau BDD32, Fast Scloud+
-unfold-factor-8 recursion reuse, and exact 8-lane sequential distance engines
-at BDD32/BDD16. BDD8/BDD4 retain parallel distance logic to bound latency.
+unfold-factor-8 recursion reuse, and one exact 8-lane sequential distance
+engine shared by BDD32/BDD16. BDD8/BDD4 retain parallel distance logic to
+bound latency.
 
 Vivado 2019.1 synthesis for XC7A200T, top `scloud_msgfunc_rce_accel`:
 
 | LUT | FF | DSP48 | BDD LUT | BDD FF |
 | ---: | ---: | ---: | ---: | ---: |
 | 9,271 | 4,471 | 48 | 7,351 | 3,394 |
+
+This table is the last measured Vivado baseline. The active RTL now removes
+one of the two mutually exclusive high-level distance engines, so about 40
+DSP48s are expected; a new Vivado run is required before updating measured
+LUT/FF/DSP figures.
 
 Relative to the initial fully parallel BDD, LUT is down 52.5% and DSP48 is
 down 81.25%. Timing and absolute power are not yet sign-off data because the

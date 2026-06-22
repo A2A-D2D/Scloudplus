@@ -520,6 +520,12 @@ module scloud_bdd16_seq_rt
     input  wire                    clk,
     input  wire                    rst_n,
     input  wire                    start,
+    output wire                    dist_start,
+    output wire [(16*Q_WIDTH)-1:0] dist_cand_a,
+    output wire [(16*Q_WIDTH)-1:0] dist_cand_b,
+    output wire [(16*Q_WIDTH)-1:0] dist_target,
+    input  wire                    dist_done,
+    input  wire                    dist_select_a,
     output wire                    start_ready,
     output reg                     busy,
     output reg                     done,
@@ -571,9 +577,6 @@ module scloud_bdd16_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
-    wire dist_start;
-    wire dist_done;
-    wire dist_select_a;
     wire child_tau_sel;
 
     genvar gi;
@@ -642,25 +645,9 @@ module scloud_bdd16_seq_rt
     endgenerate
 
     assign dist_start = (state == ST_SELECT);
-
-    scloud_bdd_distance_seq #(
-        .Q_WIDTH(Q_WIDTH),
-        .COORDS (2*COMPLEX_N),
-        .LANES  (8)
-    ) u_dist_seq (
-        .cand_a_flat(cand_a_w),
-        .cand_b_flat(cand_b_w),
-        .target_flat(target_r),
-        .clk        (clk),
-        .rst_n      (rst_n),
-        .start      (dist_start),
-        .start_ready(),
-        .busy       (),
-        .done       (dist_done),
-        .select_a   (dist_select_a),
-        .distance_a (),
-        .distance_b ()
-    );
+    assign dist_cand_a = cand_a_w;
+    assign dist_cand_b = cand_b_w;
+    assign dist_target = target_r;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -813,7 +800,21 @@ module scloud_bdd32_seq_rt
     wire dist_start;
     wire dist_done;
     wire dist_select_a;
+    wire child_dist_start;
+    wire child_dist_done;
+    wire child_dist_select_a;
+    wire [HALF_WIDTH-1:0] child_dist_cand_a;
+    wire [HALF_WIDTH-1:0] child_dist_cand_b;
+    wire [HALF_WIDTH-1:0] child_dist_target;
+    wire shared_dist_start;
+    wire shared_dist_done;
+    wire shared_dist_select_a;
+    wire [TOTAL_WIDTH-1:0] shared_dist_cand_a;
+    wire [TOTAL_WIDTH-1:0] shared_dist_cand_b;
+    wire [TOTAL_WIDTH-1:0] shared_dist_target;
     wire child_tau_sel;
+
+    reg dist_owner_child;
 
     genvar gi;
 
@@ -833,6 +834,12 @@ module scloud_bdd32_seq_rt
         .clk         (clk),
         .rst_n       (rst_n),
         .start       (child_start),
+        .dist_start  (child_dist_start),
+        .dist_cand_a (child_dist_cand_a),
+        .dist_cand_b (child_dist_cand_b),
+        .dist_target (child_dist_target),
+        .dist_done   (child_dist_done),
+        .dist_select_a(child_dist_select_a),
         .start_ready (child_ready),
         .busy        (),
         .done        (child_done),
@@ -881,22 +888,33 @@ module scloud_bdd32_seq_rt
     endgenerate
 
     assign dist_start = (state == ST_SELECT);
+    assign shared_dist_start = child_dist_start || dist_start;
+    assign shared_dist_cand_a = (dist_owner_child || child_dist_start) ?
+                                {{HALF_WIDTH{1'b0}}, child_dist_cand_a} : cand_a_w;
+    assign shared_dist_cand_b = (dist_owner_child || child_dist_start) ?
+                                {{HALF_WIDTH{1'b0}}, child_dist_cand_b} : cand_b_w;
+    assign shared_dist_target = (dist_owner_child || child_dist_start) ?
+                                {{HALF_WIDTH{1'b0}}, child_dist_target} : target_r;
+    assign child_dist_done = shared_dist_done && dist_owner_child;
+    assign child_dist_select_a = shared_dist_select_a;
+    assign dist_done = shared_dist_done && !dist_owner_child;
+    assign dist_select_a = shared_dist_select_a;
 
     scloud_bdd_distance_seq #(
         .Q_WIDTH(Q_WIDTH),
         .COORDS (2*COMPLEX_N),
         .LANES  (8)
     ) u_dist_seq (
-        .cand_a_flat(cand_a_w),
-        .cand_b_flat(cand_b_w),
-        .target_flat(target_r),
+        .cand_a_flat(shared_dist_cand_a),
+        .cand_b_flat(shared_dist_cand_b),
+        .target_flat(shared_dist_target),
         .clk        (clk),
         .rst_n      (rst_n),
-        .start      (dist_start),
+        .start      (shared_dist_start),
         .start_ready(),
         .busy       (),
-        .done       (dist_done),
-        .select_a   (dist_select_a),
+        .done       (shared_dist_done),
+        .select_a   (shared_dist_select_a),
         .distance_a (),
         .distance_b ()
     );
@@ -915,10 +933,15 @@ module scloud_bdd32_seq_rt
             z_a_r        <= {HALF_WIDTH{1'b0}};
             z_b_r        <= {HALF_WIDTH{1'b0}};
             decoded_flat <= {TOTAL_WIDTH{1'b0}};
+            dist_owner_child <= 1'b0;
             busy         <= 1'b0;
             done         <= 1'b0;
         end else begin
             done <= 1'b0;
+            if (child_dist_start)
+                dist_owner_child <= 1'b1;
+            else if (shared_dist_done)
+                dist_owner_child <= 1'b0;
             case (state)
                 ST_IDLE: begin
                     busy <= 1'b0;

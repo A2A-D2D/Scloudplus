@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-06-22 - Hierarchical distance-engine sharing
+
+### Changed
+
+- Shared one exact 8-lane sequential distance engine between BDD32 and its
+  resident BDD16 child. These two levels are active at disjoint times, so the
+  former per-level engines were unnecessary duplication.
+- Zero-extended BDD16's 16-coordinate distance requests into the shared
+  32-coordinate engine. The added coordinates are all zero on candidate and
+  target inputs, so they contribute exactly zero to both 32-bit distances.
+- Preserved 12-bit squared differences, 32-bit accumulation, and strict `<`
+  candidate selection. The external `scloud_bdd32_seq_rt` and RCE interfaces
+  are unchanged.
+
+### Expected PPA effect
+
+- Removes one physical 8-lane square engine from the active hierarchy. Based
+  on the previous 48-DSP distribution, the expected standalone count is about
+  40 DSP48s; this estimate must be replaced by a new Vivado report before it
+  is treated as measured data.
+- Adds four distance scan cycles to each BDD16 invocation because the shared
+  engine has the BDD32 32-coordinate depth. A BDD32 operation invokes BDD16
+  four times, for a fixed 16-cycle latency increase.
+
+### Verification
+
+- Verilog-2001 elaboration passed with `iverilog -g2001 -Wall`.
+- RCE tau3 roundtrip and tau4 fused-operation roundtrip passed.
+- Exact sequential-versus-parallel distance comparison passed 200/200 cases.
+- Shared BDD32 hierarchy matched the fully parallel recursive tau3/tau4
+  references bit-for-bit on 20 randomized targets.
+- SFR, all four matrix RTL suites, SW reference, C HAL 8/8, KAT-derived
+  MsgFunc 9/9, and generated 192-vector stress report passed.
+- The four-block RCE regression duration increased from 14.525 us to 15.165
+  us at the testbench's 100 MHz clock, exactly matching 64 added cycles.
+
 ## 2026-06-22 - RCE MsgFunc BDD PPA optimization
 
 ### Changed
