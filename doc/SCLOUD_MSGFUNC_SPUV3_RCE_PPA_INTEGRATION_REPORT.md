@@ -401,3 +401,19 @@ tb/rce/tb_scloud_msgfunc_rce_accel.v
 5. 再打开 `MSGENC_ADD`/`SUB_MSGDEC`，把 KEM 中间矩阵区域直接作为 q base。
 6. 加真实 RCE 仿真：2-block tau=3、2-block tau=4、4-block tau=3。
 7. 做综合看 BDD critical path；若时序紧，再对 distance tree 或 select 阶段加流水。
+
+## 13. 最新 PPA 与 HW/SW 验证状态
+
+当前 Vivado 2019.1、XC7A200T、顶层 `scloud_msgfunc_rce_accel` 的最终综合结果为：
+
+```text
+Total LUT = 9,271
+FF        = 4,471
+DSP48     = 48
+BDD LUT   = 7,351
+BDD FF    = 3,394
+```
+
+相对最初 19,515 LUT、7,050 FF、256 DSP 的全并行版本，LUT 下降 52.5%，FF 下降 36.6%，DSP 下降 81.25%。功耗报告为 213.135 W，但因缺少时钟和活动约束且置信度为 Low，只能用于判断下降方向；Timing 仍无有效 WNS/TNS。
+
+DS 辅助 HW/SW 验证链已经确认 9/9 KAT-derived SW MsgFunc roundtrip 和 2/2 RTL/SW MsgFunc cosim。完整 openHiTLS `pk/sk/ct/ss` 逐字节 KAT 尚未闭环，具体边界和后续任务见 `doc/SCLOUD_HW_SW_KAT_VERIFICATION.md`。

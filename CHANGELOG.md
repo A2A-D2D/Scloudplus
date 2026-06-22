@@ -45,3 +45,13 @@ provided and report confidence is Low.
   256-bit DPRAM interface as device I/O.
 - Evaluate narrower square operands only after fixed-point range proof and
   C-model/RTL equivalence testing.
+
+### DS-assisted HW/SW verification update
+
+- Added a nine-vector openHiTLS KAT parser and KAT-derived SW verification
+  chain for ss16, ss24, and ss32.
+- Confirmed 9/9 KAT-message MsgFunc roundtrips and 2/2 RTL/SW MsgFunc cosim.
+- Recorded the exact closure boundary: simplified A generation/sampling,
+  incomplete pk/sk/ct/ss expected-value comparison, and an ss24 Encaps heap
+  corruption mean that complete official KAT equivalence is not yet closed.
+- Added `doc/SCLOUD_HW_SW_KAT_VERIFICATION.md` as the verification record.

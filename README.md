@@ -69,7 +69,20 @@ Expected result:
 doc/SCLOUD_MSGFUNC_RCE_TECHNICAL_DESIGN.md
 doc/SCLOUD_MSGFUNC_SPUV3_RCE_PPA_INTEGRATION_REPORT.md
 doc/SPU_SUBSYSTEM_SCLOUD_TOP_INTEGRATION.md
+doc/SCLOUD_HW_SW_KAT_VERIFICATION.md
 ```
+
+## HW/SW KAT Verification
+
+The DS-assisted verification chain parses nine openHiTLS KAT vectors covering
+ss16, ss24, and ss32. Confirmed results include 9/9 KAT-derived SW MsgFunc
+roundtrips and an RTL/SW MsgFunc cosim result of 2/2 PASS.
+
+This is not yet a complete byte-exact openHiTLS KAT closure: the local model
+uses simplified A generation/sampling, and pk/sk/ciphertext/shared-secret
+comparison is incomplete. See
+[`doc/SCLOUD_HW_SW_KAT_VERIFICATION.md`](doc/SCLOUD_HW_SW_KAT_VERIFICATION.md)
+for evidence and remaining work.
 
 ## RCE MsgFunc Test
 
