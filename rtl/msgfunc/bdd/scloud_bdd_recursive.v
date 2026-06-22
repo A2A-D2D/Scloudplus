@@ -163,6 +163,166 @@ module scloud_bdd_distance_tree
 
 endmodule
 
+module scloud_bdd_distance_pair_pipe
+#(
+    parameter Q_WIDTH = 12,
+    parameter COORDS  = 8
+)
+(
+    input  wire [(COORDS*Q_WIDTH)-1:0] cand_a_flat,
+    input  wire [(COORDS*Q_WIDTH)-1:0] cand_b_flat,
+    input  wire [(COORDS*Q_WIDTH)-1:0] target_flat,
+    input  wire                        clk,
+    input  wire                        rst_n,
+    input  wire                        start,
+    output wire                        start_ready,
+    output reg                         busy,
+    output reg                         done,
+    output reg                         select_a,
+    output reg  [31:0]                 distance_a,
+    output reg  [31:0]                 distance_b
+);
+
+    localparam TERM_WIDTH = (2 * Q_WIDTH) + 2;
+    localparam DIFF_WIDTH = Q_WIDTH + 1;
+
+    localparam [2:0] ST_IDLE      = 3'd0;
+    localparam [2:0] ST_LOAD_DIFF = 3'd1;
+    localparam [2:0] ST_MUL_1     = 3'd2;
+    localparam [2:0] ST_MUL_2     = 3'd3;
+    localparam [2:0] ST_SUM       = 3'd4;
+    localparam [2:0] ST_COMPARE   = 3'd5;
+    localparam [2:0] ST_DONE      = 3'd6;
+
+    reg [2:0] state;
+    reg [(COORDS*DIFF_WIDTH)-1:0] diff_a_r;
+    reg [(COORDS*DIFF_WIDTH)-1:0] diff_b_r;
+    reg [(COORDS*TERM_WIDTH)-1:0] sq_a_1_r;
+    reg [(COORDS*TERM_WIDTH)-1:0] sq_b_1_r;
+    reg [(COORDS*TERM_WIDTH)-1:0] sq_a_2_r;
+    reg [(COORDS*TERM_WIDTH)-1:0] sq_b_2_r;
+    reg [31:0] sum_a_r;
+    reg [31:0] sum_b_r;
+
+    wire [(COORDS*DIFF_WIDTH)-1:0] diff_a_w;
+    wire [(COORDS*DIFF_WIDTH)-1:0] diff_b_w;
+    wire [(COORDS*TERM_WIDTH)-1:0] sq_a_w;
+    wire [(COORDS*TERM_WIDTH)-1:0] sq_b_w;
+    wire [31:0] sum_a_w;
+    wire [31:0] sum_b_w;
+
+    assign start_ready = (state == ST_IDLE);
+
+    genvar gi;
+    generate
+        for (gi = 0; gi < COORDS; gi = gi + 1) begin : gen_pair_lane
+            wire [Q_WIDTH-1:0] diff_a_q;
+            wire [Q_WIDTH-1:0] diff_b_q;
+            wire signed [DIFF_WIDTH-1:0] diff_a_lane;
+            wire signed [DIFF_WIDTH-1:0] diff_b_lane;
+
+            assign diff_a_q = cand_a_flat[(gi*Q_WIDTH)+:Q_WIDTH] -
+                              target_flat[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_b_q = cand_b_flat[(gi*Q_WIDTH)+:Q_WIDTH] -
+                              target_flat[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_a_w[(gi*DIFF_WIDTH)+:DIFF_WIDTH] =
+                {diff_a_q[Q_WIDTH-1], diff_a_q};
+            assign diff_b_w[(gi*DIFF_WIDTH)+:DIFF_WIDTH] =
+                {diff_b_q[Q_WIDTH-1], diff_b_q};
+            assign diff_a_lane = diff_a_r[(gi*DIFF_WIDTH)+:DIFF_WIDTH];
+            assign diff_b_lane = diff_b_r[(gi*DIFF_WIDTH)+:DIFF_WIDTH];
+            assign sq_a_w[(gi*TERM_WIDTH)+:TERM_WIDTH] =
+                diff_a_lane * diff_a_lane;
+            assign sq_b_w[(gi*TERM_WIDTH)+:TERM_WIDTH] =
+                diff_b_lane * diff_b_lane;
+        end
+    endgenerate
+
+    scloud_bdd_sum_tree #(
+        .TERMS    (COORDS),
+        .IN_WIDTH (TERM_WIDTH),
+        .OUT_WIDTH(32)
+    ) u_sum_a (
+        .terms_flat(sq_a_2_r),
+        .sum_out   (sum_a_w)
+    );
+
+    scloud_bdd_sum_tree #(
+        .TERMS    (COORDS),
+        .IN_WIDTH (TERM_WIDTH),
+        .OUT_WIDTH(32)
+    ) u_sum_b (
+        .terms_flat(sq_b_2_r),
+        .sum_out   (sum_b_w)
+    );
+
+    /*
+     * Pipeline data intentionally has no asynchronous reset. It is fully
+     * overwritten on every request, allowing Vivado to map the multiply
+     * stages onto DSP48 AREG/MREG/PREG resources.
+     */
+    always @(posedge clk) begin
+        if (state == ST_LOAD_DIFF) begin
+            diff_a_r <= diff_a_w;
+            diff_b_r <= diff_b_w;
+        end
+        if (state == ST_MUL_1) begin
+            sq_a_1_r <= sq_a_w;
+            sq_b_1_r <= sq_b_w;
+        end
+        if (state == ST_MUL_2) begin
+            sq_a_2_r <= sq_a_1_r;
+            sq_b_2_r <= sq_b_1_r;
+        end
+        if (state == ST_SUM) begin
+            sum_a_r <= sum_a_w;
+            sum_b_r <= sum_b_w;
+        end
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state      <= ST_IDLE;
+            busy       <= 1'b0;
+            done       <= 1'b0;
+            select_a   <= 1'b0;
+            distance_a <= 32'd0;
+            distance_b <= 32'd0;
+        end else begin
+            done <= 1'b0;
+            case (state)
+                ST_IDLE: begin
+                    busy <= 1'b0;
+                    if (start) begin
+                        busy  <= 1'b1;
+                        state <= ST_LOAD_DIFF;
+                    end
+                end
+                ST_LOAD_DIFF: state <= ST_MUL_1;
+                ST_MUL_1:     state <= ST_MUL_2;
+                ST_MUL_2:     state <= ST_SUM;
+                ST_SUM:       state <= ST_COMPARE;
+                ST_COMPARE: begin
+                    distance_a <= sum_a_r;
+                    distance_b <= sum_b_r;
+                    select_a   <= (sum_a_r < sum_b_r);
+                    state      <= ST_DONE;
+                end
+                ST_DONE: begin
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= ST_IDLE;
+                end
+                default: begin
+                    state <= ST_IDLE;
+                    busy  <= 1'b0;
+                end
+            endcase
+        end
+    end
+
+endmodule
+
 module scloud_bdd_distance_seq
 #(
     parameter Q_WIDTH = 12,

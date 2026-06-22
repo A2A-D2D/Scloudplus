@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-06-22 - BDD8 parallel distance pipeline
+
+### Constrained synthesis trigger
+
+- After pipelining the shared BDD32/BDD16 engine, the 5.000 ns standalone
+  synthesis improved WNS from -17.908 ns to -13.357 ns, while TNS changed
+  from -3086.235 ns to -3459.357 ns.
+- The worst 18.205 ns path moved into the resident BDD8 kernel and crossed
+  candidate phi logic, a parallel distance DSP, the sum tree, and final
+  candidate selection.
+- DSP input/PREG warnings fell to 64/32, identifying the 16 BDD8 parallel
+  distance DSPs as the next targeted pipeline boundary. BDD4 remains
+  unchanged.
+
+### Changed
+
+- Added `scloud_bdd_distance_pair_pipe`, retaining two fully parallel exact
+  8-coordinate distance paths while separating modular difference, multiply,
+  product register, sum, and strict comparison stages.
+- Replaced only BDD8's two combinational distance trees with the pipelined
+  pair. The 40-DSP architecture, 12-bit modular difference, 32-bit distance,
+  and strict `<` tie-to-B behavior are unchanged.
+- Kept pipeline data registers free of asynchronous reset so Vivado can map
+  them into DSP48 pipeline stages; reset remains on control and outputs.
+
+### Latency and verification
+
+- BDD32 completes in 634 cycles in the randomized tau3/tau4 regression.
+- The new BDD8 pair matched the combinational reference for 200 random cases
+  plus two explicit ties. BDD32 matched recursive tau3/tau4 references for
+  20 random cases, and the RCE two/four-block regression passed.
+- Updated post-synthesis timing, utilization, and DRC results are pending a
+  Vivado rerun with `constraints/scloud_msgfunc_rce.xdc`.
+
 ## 2026-06-22 - Shared distance DSP pipeline
 
 ### Constrained synthesis trigger

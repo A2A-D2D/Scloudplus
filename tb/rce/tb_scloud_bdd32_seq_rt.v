@@ -26,6 +26,8 @@ module tb_scloud_bdd32_seq_rt;
     integer coord_index;
     integer error_count;
     integer cycle_count;
+    integer min_cycle_count;
+    integer max_cycle_count;
 
     always #5 clk = ~clk;
 
@@ -111,6 +113,13 @@ module tb_scloud_bdd32_seq_rt;
                 $display("FAIL mismatch case=%0d tau=%0d", test_index,
                          tau_sel ? 4 : 3);
             end
+
+            if (done) begin
+                if (cycle_count < min_cycle_count)
+                    min_cycle_count = cycle_count;
+                if (cycle_count > max_cycle_count)
+                    max_cycle_count = cycle_count;
+            end
         end
     endtask
 
@@ -125,6 +134,8 @@ module tb_scloud_bdd32_seq_rt;
         target_flat = {(COORDS*Q_WIDTH){1'b0}};
         error_count = 0;
         cycle_count = 0;
+        min_cycle_count = 5000;
+        max_cycle_count = 0;
 
         repeat (4) @(posedge clk);
         rst_n = 1'b1;
@@ -138,7 +149,8 @@ module tb_scloud_bdd32_seq_rt;
         end
 
         if (error_count == 0)
-            $display("TB_PASS scloud_bdd32_seq_rt cases=%0d", CASES);
+            $display("TB_PASS scloud_bdd32_seq_rt cases=%0d cycles=%0d..%0d",
+                     CASES, min_cycle_count, max_cycle_count);
         else
             $display("TB_FAIL scloud_bdd32_seq_rt errors=%0d", error_count);
         $finish;
