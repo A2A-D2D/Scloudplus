@@ -960,6 +960,12 @@ DRC 总数由半展开版本的 516 降至 196，其中 DPIP/DPOP 警告随 DSP 
 
 该节只记录 RTL 和仿真证据。流水后的 WNS/TNS、DSP 内部寄存器吸收情况和资源变化必须以重新运行 Vivado 2019.1 综合后的报告为准。
 
+### 22.7 BDD4 最末级距离流水
+
+BDD8 流水后的综合结果为 8,877 LUT、5,008 FF、40 DSP，WNS 改善到 -11.392 ns，但 16.240 ns 最差数据路径下沉到 `scloud_bdd4_seq_rt`。该路径仍在一拍内穿过 phi/candidate 运算、DSP 平方、距离加法树、A/B 严格比较和 decoded 选择，共 21 级逻辑。DRC 剩余的 32 个 DSP 输入流水告警和 16 个 PREG 告警也全部属于两个 BDD4 子核。
+
+因此 BDD4 的两棵四坐标组合距离树也改用 `scloud_bdd_distance_pair_pipe`，通过已有 start/done 握手向上层传播固定延迟。该改动不增加 DSP，不修改模差值、距离位宽或 tie-break；目标是消除当前设计最后一段 `phi -> DSP -> sum -> compare` 单拍组合链。BDD4 对递归 tau3/tau4 参考的 100 组随机等价测试通过；更新后的时序与资源结果仍以重新综合报告为准。
+
 ## 23. DS 辅助 HW/SW KAT 验证状态
 
 DS 辅助加入了 openHiTLS KAT 解析、SW HAL、KEM 功能模型和 RTL cosim 验证链。KAT 输入共 9 组，ss16、ss24、ss32 各 3 组。

@@ -63,12 +63,13 @@ module scloud_bdd4_seq_rt
     localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
     localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
 
-    localparam [2:0] ST_IDLE    = 3'd0;
-    localparam [2:0] ST_BDD_Y   = 3'd1;
-    localparam [2:0] ST_INV_PHI = 3'd2;
-    localparam [2:0] ST_BDD_Z   = 3'd3;
-    localparam [2:0] ST_SELECT  = 3'd4;
-    localparam [2:0] ST_DONE    = 3'd5;
+    localparam [2:0] ST_IDLE       = 3'd0;
+    localparam [2:0] ST_BDD_Y      = 3'd1;
+    localparam [2:0] ST_INV_PHI    = 3'd2;
+    localparam [2:0] ST_BDD_Z      = 3'd3;
+    localparam [2:0] ST_START_DIST = 3'd4;
+    localparam [2:0] ST_WAIT_DIST  = 3'd5;
+    localparam [2:0] ST_DONE       = 3'd6;
 
     reg [2:0] state;
     reg tau_sel_r;
@@ -95,12 +96,14 @@ module scloud_bdd4_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
-    wire [31:0] dist_a_w;
-    wire [31:0] dist_b_w;
+    wire dist_ready;
+    wire dist_start;
+    wire dist_done;
+    wire dist_select_a;
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE);
+    assign start_ready = (state == ST_IDLE) && dist_ready;
 
     scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_l_re (
         .tau_sel(tau_sel_r),
@@ -203,22 +206,24 @@ module scloud_bdd4_seq_rt
         end
     endgenerate
 
-    scloud_bdd_distance_tree #(
-        .Q_WIDTH(Q_WIDTH),
-        .COORDS (2*COMPLEX_N)
-    ) u_dist_a (
-        .cand_flat   (cand_a_w),
-        .target_flat (target_r),
-        .distance_out(dist_a_w)
-    );
+    assign dist_start = (state == ST_START_DIST) && dist_ready;
 
-    scloud_bdd_distance_tree #(
+    scloud_bdd_distance_pair_pipe #(
         .Q_WIDTH(Q_WIDTH),
         .COORDS (2*COMPLEX_N)
-    ) u_dist_b (
-        .cand_flat   (cand_b_w),
-        .target_flat (target_r),
-        .distance_out(dist_b_w)
+    ) u_dist_pipe (
+        .cand_a_flat(cand_a_w),
+        .cand_b_flat(cand_b_w),
+        .target_flat(target_r),
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .start      (dist_start),
+        .start_ready(dist_ready),
+        .busy       (),
+        .done       (dist_done),
+        .select_a   (dist_select_a),
+        .distance_a (),
+        .distance_b ()
     );
 
     always @(posedge clk or negedge rst_n) begin
@@ -242,7 +247,7 @@ module scloud_bdd4_seq_rt
             case (state)
                 ST_IDLE: begin
                     busy <= 1'b0;
-                    if (start) begin
+                    if (start_ready && start) begin
                         tau_sel_r  <= tau_sel;
                         target_r   <= target_flat;
                         target_l_r <= target_flat[0+:HALF_WIDTH];
@@ -264,11 +269,17 @@ module scloud_bdd4_seq_rt
                 ST_BDD_Z: begin
                     z_a_r <= z_a_w;
                     z_b_r <= z_b_w;
-                    state <= ST_SELECT;
+                    state <= ST_START_DIST;
                 end
-                ST_SELECT: begin
-                    decoded_flat <= (dist_a_w < dist_b_w) ? cand_a_w : cand_b_w;
-                    state        <= ST_DONE;
+                ST_START_DIST: begin
+                    if (dist_ready)
+                        state <= ST_WAIT_DIST;
+                end
+                ST_WAIT_DIST: begin
+                    if (dist_done) begin
+                        decoded_flat <= dist_select_a ? cand_a_w : cand_b_w;
+                        state        <= ST_DONE;
+                    end
                 end
                 ST_DONE: begin
                     busy  <= 1'b0;

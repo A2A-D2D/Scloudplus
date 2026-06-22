@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-06-22 - BDD4 final distance-chain pipeline
+
+### Constrained synthesis trigger
+
+- The BDD8 pipeline synthesis produced 8,877 LUT, 5,008 FF, and 40 DSP48
+  blocks. WNS improved to -11.392 ns, but TNS remained -3006.201 ns across
+  1,281 failing endpoints.
+- The worst 16.240 ns path moved into `scloud_bdd4_seq_rt` and still crossed
+  phi/candidate arithmetic, one unregistered DSP square, the distance sum
+  tree, strict A/B comparison, and decoded output selection in one cycle.
+- All remaining 32 DPIP warnings and 16 PREG warnings belong to the two BDD4
+  children. This confirms the BDD8 register boundary is effective and the
+  last unpipelined distance trees are now the limiting paths.
+
+### Changed
+
+- Replaced each BDD4 candidate A/B combinational distance pair with the
+  existing `scloud_bdd_distance_pair_pipe` configured for four coordinates.
+- Preserved the total 40-DSP architecture, 12-bit modular subtraction,
+  32-bit exact distance, and strict `<` tie-to-B behavior.
+- Added explicit distance start/wait states at BDD4. BDD8 and its parents
+  naturally observe the added fixed latency through the existing handshake.
+
+### Verification boundary
+
+- Exact parallel-pair and shared-distance unit regressions pass 200 random
+  cases plus two explicit ties each.
+- The pipelined BDD4 matched the recursive tau3/tau4 reference for 100 random
+  targets.
+- RCE tau3/tau4 two-block fused and non-fused operations and tau3 four-block
+  decode/writeback pass with the BDD4 pipeline enabled.
+- Timing, DRC, utilization, and full BDD32 latency must be refreshed after a
+  new Vivado synthesis and uncongested BDD32 reference run.
+
 ## 2026-06-22 - BDD8 parallel distance pipeline
 
 ### Constrained synthesis trigger
