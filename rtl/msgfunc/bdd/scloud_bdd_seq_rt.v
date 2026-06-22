@@ -63,15 +63,16 @@ module scloud_bdd4_seq_rt
     localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
     localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
 
-    localparam [2:0] ST_IDLE       = 3'd0;
-    localparam [2:0] ST_BDD_Y      = 3'd1;
-    localparam [2:0] ST_INV_PHI    = 3'd2;
-    localparam [2:0] ST_BDD_Z      = 3'd3;
-    localparam [2:0] ST_START_DIST = 3'd4;
-    localparam [2:0] ST_WAIT_DIST  = 3'd5;
-    localparam [2:0] ST_DONE       = 3'd6;
+    localparam [3:0] ST_IDLE       = 4'd0;
+    localparam [3:0] ST_BDD_Y      = 4'd1;
+    localparam [3:0] ST_INV_PHI    = 4'd2;
+    localparam [3:0] ST_BDD_Z      = 4'd3;
+    localparam [3:0] ST_PREP_DIST  = 4'd4;
+    localparam [3:0] ST_START_DIST = 4'd5;
+    localparam [3:0] ST_WAIT_DIST  = 4'd6;
+    localparam [3:0] ST_DONE       = 4'd7;
 
-    reg [2:0] state;
+    reg [3:0] state;
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
@@ -83,6 +84,8 @@ module scloud_bdd4_seq_rt
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
+    reg [TOTAL_WIDTH-1:0] cand_a_r;
+    reg [TOTAL_WIDTH-1:0] cand_b_r;
 
     wire [HALF_WIDTH-1:0] y_l_w;
     wire [HALF_WIDTH-1:0] y_r_w;
@@ -212,8 +215,8 @@ module scloud_bdd4_seq_rt
         .Q_WIDTH(Q_WIDTH),
         .COORDS (2*COMPLEX_N)
     ) u_dist_pipe (
-        .cand_a_flat(cand_a_w),
-        .cand_b_flat(cand_b_w),
+        .cand_a_flat(cand_a_r),
+        .cand_b_flat(cand_b_r),
         .target_flat(target_r),
         .clk        (clk),
         .rst_n      (rst_n),
@@ -225,6 +228,13 @@ module scloud_bdd4_seq_rt
         .distance_a (),
         .distance_b ()
     );
+
+    always @(posedge clk) begin
+        if (state == ST_PREP_DIST) begin
+            cand_a_r <= cand_a_w;
+            cand_b_r <= cand_b_w;
+        end
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -269,6 +279,9 @@ module scloud_bdd4_seq_rt
                 ST_BDD_Z: begin
                     z_a_r <= z_a_w;
                     z_b_r <= z_b_w;
+                    state <= ST_PREP_DIST;
+                end
+                ST_PREP_DIST: begin
                     state <= ST_START_DIST;
                 end
                 ST_START_DIST: begin
@@ -277,7 +290,7 @@ module scloud_bdd4_seq_rt
                 end
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_w : cand_b_w;
+                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
                         state        <= ST_DONE;
                     end
                 end
@@ -318,16 +331,17 @@ module scloud_bdd8_seq_rt
     localparam HALF_WIDTH   = HALF_COORDS * Q_WIDTH;
     localparam TOTAL_WIDTH  = 2 * COMPLEX_N * Q_WIDTH;
 
-    localparam [2:0] ST_IDLE    = 3'd0;
-    localparam [2:0] ST_WAIT_Y  = 3'd1;
-    localparam [2:0] ST_INV_PHI = 3'd2;
-    localparam [2:0] ST_START_Z = 3'd3;
-    localparam [2:0] ST_WAIT_Z  = 3'd4;
-    localparam [2:0] ST_START_DIST = 3'd5;
-    localparam [2:0] ST_WAIT_DIST  = 3'd6;
-    localparam [2:0] ST_DONE       = 3'd7;
+    localparam [3:0] ST_IDLE       = 4'd0;
+    localparam [3:0] ST_WAIT_Y     = 4'd1;
+    localparam [3:0] ST_INV_PHI    = 4'd2;
+    localparam [3:0] ST_START_Z    = 4'd3;
+    localparam [3:0] ST_WAIT_Z     = 4'd4;
+    localparam [3:0] ST_PREP_DIST  = 4'd5;
+    localparam [3:0] ST_START_DIST = 4'd6;
+    localparam [3:0] ST_WAIT_DIST  = 4'd7;
+    localparam [3:0] ST_DONE       = 4'd8;
 
-    reg [2:0] state;
+    reg [3:0] state;
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
@@ -339,6 +353,8 @@ module scloud_bdd8_seq_rt
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
+    reg [TOTAL_WIDTH-1:0] cand_a_r;
+    reg [TOTAL_WIDTH-1:0] cand_b_r;
 
     wire child_start;
     wire child_a_ready;
@@ -446,8 +462,8 @@ module scloud_bdd8_seq_rt
         .Q_WIDTH(Q_WIDTH),
         .COORDS (2*COMPLEX_N)
     ) u_dist_pipe (
-        .cand_a_flat(cand_a_w),
-        .cand_b_flat(cand_b_w),
+        .cand_a_flat(cand_a_r),
+        .cand_b_flat(cand_b_r),
         .target_flat(target_r),
         .clk        (clk),
         .rst_n      (rst_n),
@@ -459,6 +475,13 @@ module scloud_bdd8_seq_rt
         .distance_a (),
         .distance_b ()
     );
+
+    always @(posedge clk) begin
+        if (state == ST_PREP_DIST) begin
+            cand_a_r <= cand_a_w;
+            cand_b_r <= cand_b_w;
+        end
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -511,8 +534,11 @@ module scloud_bdd8_seq_rt
                     if (child_a_done && child_b_done) begin
                         z_a_r <= child_a_decoded;
                         z_b_r <= child_b_decoded;
-                        state <= ST_START_DIST;
+                        state <= ST_PREP_DIST;
                     end
+                end
+                ST_PREP_DIST: begin
+                    state <= ST_START_DIST;
                 end
                 ST_START_DIST: begin
                     if (dist_ready)
@@ -520,7 +546,7 @@ module scloud_bdd8_seq_rt
                 end
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_w : cand_b_w;
+                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
                         state        <= ST_DONE;
                     end
                 end
@@ -576,9 +602,10 @@ module scloud_bdd16_seq_rt
     localparam [3:0] ST_WAIT_ZA  = 4'd6;
     localparam [3:0] ST_START_ZB = 4'd7;
     localparam [3:0] ST_WAIT_ZB  = 4'd8;
-    localparam [3:0] ST_SELECT    = 4'd9;
-    localparam [3:0] ST_WAIT_DIST = 4'd10;
-    localparam [3:0] ST_DONE      = 4'd11;
+    localparam [3:0] ST_SELECT     = 4'd9;
+    localparam [3:0] ST_START_DIST = 4'd10;
+    localparam [3:0] ST_WAIT_DIST  = 4'd11;
+    localparam [3:0] ST_DONE       = 4'd12;
 
     reg [3:0] state;
     reg tau_sel_r;
@@ -592,6 +619,8 @@ module scloud_bdd16_seq_rt
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
+    reg [TOTAL_WIDTH-1:0] cand_a_r;
+    reg [TOTAL_WIDTH-1:0] cand_b_r;
 
     wire child_start;
     wire child_ready;
@@ -673,10 +702,17 @@ module scloud_bdd16_seq_rt
         end
     endgenerate
 
-    assign dist_start = (state == ST_SELECT);
-    assign dist_cand_a = cand_a_w;
-    assign dist_cand_b = cand_b_w;
+    assign dist_start = (state == ST_START_DIST);
+    assign dist_cand_a = cand_a_r;
+    assign dist_cand_b = cand_b_r;
     assign dist_target = target_r;
+
+    always @(posedge clk) begin
+        if (state == ST_SELECT) begin
+            cand_a_r <= cand_a_w;
+            cand_b_r <= cand_b_w;
+        end
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -742,11 +778,12 @@ module scloud_bdd16_seq_rt
                     end
                 end
                 ST_SELECT: begin
-                    state <= ST_WAIT_DIST;
+                    state <= ST_START_DIST;
                 end
+                ST_START_DIST: state <= ST_WAIT_DIST;
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_w : cand_b_w;
+                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
                         state        <= ST_DONE;
                     end
                 end
@@ -799,9 +836,10 @@ module scloud_bdd32_seq_rt
     localparam [3:0] ST_WAIT_ZA  = 4'd6;
     localparam [3:0] ST_START_ZB = 4'd7;
     localparam [3:0] ST_WAIT_ZB  = 4'd8;
-    localparam [3:0] ST_SELECT    = 4'd9;
-    localparam [3:0] ST_WAIT_DIST = 4'd10;
-    localparam [3:0] ST_DONE      = 4'd11;
+    localparam [3:0] ST_SELECT     = 4'd9;
+    localparam [3:0] ST_START_DIST = 4'd10;
+    localparam [3:0] ST_WAIT_DIST  = 4'd11;
+    localparam [3:0] ST_DONE       = 4'd12;
 
     reg [3:0] state;
     reg tau_sel_r;
@@ -816,6 +854,8 @@ module scloud_bdd32_seq_rt
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
+    reg [TOTAL_WIDTH-1:0] cand_a_r;
+    reg [TOTAL_WIDTH-1:0] cand_b_r;
 
     wire child_start;
     wire child_ready;
@@ -922,12 +962,12 @@ module scloud_bdd32_seq_rt
         end
     endgenerate
 
-    assign dist_start = (state == ST_SELECT);
+    assign dist_start = (state == ST_START_DIST);
     assign shared_dist_start = child_dist_start || dist_start;
     assign shared_dist_cand_a = (dist_owner_child || child_dist_start) ?
-                                {{HALF_WIDTH{1'b0}}, child_dist_cand_a} : cand_a_w;
+                                {{HALF_WIDTH{1'b0}}, child_dist_cand_a} : cand_a_r;
     assign shared_dist_cand_b = (dist_owner_child || child_dist_start) ?
-                                {{HALF_WIDTH{1'b0}}, child_dist_cand_b} : cand_b_w;
+                                {{HALF_WIDTH{1'b0}}, child_dist_cand_b} : cand_b_r;
     assign shared_dist_target = (dist_owner_child || child_dist_start) ?
                                 {{HALF_WIDTH{1'b0}}, child_dist_target} : target_r;
     assign child_dist_done = shared_dist_done && dist_owner_child;
@@ -953,6 +993,13 @@ module scloud_bdd32_seq_rt
         .distance_a (),
         .distance_b ()
     );
+
+    always @(posedge clk) begin
+        if (state == ST_SELECT) begin
+            cand_a_r <= cand_a_w;
+            cand_b_r <= cand_b_w;
+        end
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -1033,11 +1080,12 @@ module scloud_bdd32_seq_rt
                     end
                 end
                 ST_SELECT: begin
-                    state <= ST_WAIT_DIST;
+                    state <= ST_START_DIST;
                 end
+                ST_START_DIST: state <= ST_WAIT_DIST;
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_w : cand_b_w;
+                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
                         state        <= ST_DONE;
                     end
                 end

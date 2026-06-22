@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-06-22 - Hierarchical candidate snapshot pipeline
+
+### Constrained synthesis trigger
+
+- The four-stage MsgDec phi pipeline synthesis produced 8,605 LUT, 6,449 FF,
+  and 40 DSP48 blocks. WNS improved from -6.627 ns to -3.380 ns and TNS
+  improved from -2671.024 ns to -2169.470 ns.
+- The worst 7.568 ns path moved back into BDD32 candidate preparation. It
+  crossed phi multiplication, candidate modular addition, distance modular
+  subtraction, and the DSP input register in one cycle.
+
+### Changed
+
+- Added candidate A/B snapshot registers at BDD4, BDD8, BDD16, and BDD32.
+  Distance engines now consume registered candidates, separating candidate
+  construction from candidate-to-target subtraction.
+- Added explicit one-cycle distance-launch states. This prevents a ready/done
+  overlap from retriggering the BDD4/BDD8 local distance pipeline and keeps
+  parent/child handshakes lossless.
+- Preserved all distance widths, strict tie behavior, DSP count, and external
+  interfaces. Each BDD node invocation gains one fixed preparation cycle.
+
+### Verification
+
+- BDD4 matched the tau3/tau4 recursive reference for 100 random targets.
+- The RCE tau3/tau4 two-block fused and non-fused operations and tau3
+  four-block decode/writeback regressions pass.
+- Post-change timing and utilization require a new constrained synthesis.
+
 ## 2026-06-22 - Four-stage MsgDec phi pipeline
 
 ### Constrained synthesis trigger

@@ -972,6 +972,12 @@ BDD4 流水后的综合结果为 8,850 LUT、5,546 FF、40 DSP，WNS 从 -11.392
 
 新增 `scloud_msgfunc_phi_decode_layer` 与 `scloud_msgfunc_phi_decode_seq`，按 Barnes-Wall 递归深度将四层 inverse-phi 各自放入独立时钟拍。RCE 只启动当前 tau 对应的流水，完成后再经 `label_to_msg` 写入 96-bit `msg_result_r`。每个解码块增加约 5 拍固定延迟，不改变 Q/label packing、模回绕、消息映射、DPRAM 格式或外部接口。tau3/tau4 流水与原组合递归实现的 200 组随机标签等价测试及 RCE 端到端回归均通过；更新后的 WNS/TNS 仍以重新综合为准。
 
+### 22.9 分层候选快照流水
+
+四级 MsgDec phi 流水后的综合结果为 8,605 LUT、6,449 FF、40 DSP，WNS 从 -6.627 ns 改善到 -3.380 ns。最差路径回到 BDD32 候选准备：`z_b_r -> phi -> candidate add -> distance diff -> DSP input register`，一拍内包含 5 级 carry，数据路径为 7.568 ns。
+
+BDD4、BDD8、BDD16 和 BDD32 均新增候选 A/B 快照寄存器。各层先锁存完整候选，下一拍通过独立 launch 状态启动 distance，使 candidate modular add 与 candidate-to-target subtraction 分属不同周期。显式 launch 状态同时避免本地 distance 的 `done`/`ready` 重叠造成重复 start。该改动保持 40 DSP、12-bit 模回绕、32-bit 精确距离、strict `<` tie-break 和外部接口不变；BDD4 100 组随机参考等价及 RCE 端到端回归通过，更新后的时序和资源仍以重新综合为准。
+
 ## 23. DS 辅助 HW/SW KAT 验证状态
 
 DS 辅助加入了 openHiTLS KAT 解析、SW HAL、KEM 功能模型和 RTL cosim 验证链。KAT 输入共 9 组，ss16、ss24、ss32 各 3 组。
