@@ -73,6 +73,12 @@ the recursive kernels but intentionally retains exact 12-bit squared-distance
 arithmetic. The paper's 4-bit square optimization remains gated on a formal
 range/equivalence proof for the local fixed-point representation.
 
+BDD16 and BDD32 additionally use one 8-lane `scloud_bdd_distance_seq` each.
+The lanes scan candidate A and candidate B in chunks and accumulate the same
+32-bit squared distances as the parallel trees. BDD8 and BDD4 keep their
+parallel distance trees to limit the latency increase. The expected structural
+DSP count is 48: 8 at BDD32, 8 at BDD16, and 32 in the resident BDD8 hierarchy.
+
 ## Filelist
 
 Use:
