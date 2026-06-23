@@ -76,16 +76,14 @@ module scloud_bdd4_seq_rt
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
-    reg [HALF_WIDTH-1:0]  target_l_r;
-    reg [HALF_WIDTH-1:0]  target_r_r;
     reg [HALF_WIDTH-1:0]  y_l_r;
     reg [HALF_WIDTH-1:0]  y_r_r;
     reg [HALF_WIDTH-1:0]  z_a_in_r;
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
-    reg [TOTAL_WIDTH-1:0] cand_a_r;
-    reg [TOTAL_WIDTH-1:0] cand_b_r;
+    reg [HALF_WIDTH-1:0]  cand_a_hi_r;
+    reg [HALF_WIDTH-1:0]  cand_b_lo_r;
 
     wire [HALF_WIDTH-1:0] y_l_w;
     wire [HALF_WIDTH-1:0] y_r_w;
@@ -99,6 +97,8 @@ module scloud_bdd4_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_snap_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_snap_w;
     wire dist_ready;
     wire dist_start;
     wire dist_done;
@@ -110,36 +110,41 @@ module scloud_bdd4_seq_rt
 
     scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_l_re (
         .tau_sel(tau_sel_r),
-        .x_q(target_l_r[(0*Q_WIDTH)+:Q_WIDTH]),
+        .x_q(target_r[(0*Q_WIDTH)+:Q_WIDTH]),
         .y_q(y_l_w[(0*Q_WIDTH)+:Q_WIDTH])
     );
 
     scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_l_im (
         .tau_sel(tau_sel_r),
-        .x_q(target_l_r[(1*Q_WIDTH)+:Q_WIDTH]),
+        .x_q(target_r[(1*Q_WIDTH)+:Q_WIDTH]),
         .y_q(y_l_w[(1*Q_WIDTH)+:Q_WIDTH])
     );
 
     scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_r_re (
         .tau_sel(tau_sel_r),
-        .x_q(target_r_r[(0*Q_WIDTH)+:Q_WIDTH]),
+        .x_q(target_r[HALF_WIDTH+(0*Q_WIDTH)+:Q_WIDTH]),
         .y_q(y_r_w[(0*Q_WIDTH)+:Q_WIDTH])
     );
 
     scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_r_im (
         .tau_sel(tau_sel_r),
-        .x_q(target_r_r[(1*Q_WIDTH)+:Q_WIDTH]),
+        .x_q(target_r[HALF_WIDTH+(1*Q_WIDTH)+:Q_WIDTH]),
         .y_q(y_r_w[(1*Q_WIDTH)+:Q_WIDTH])
     );
 
     generate
         for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
             assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
             assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
         end
     endgenerate
+
+    assign cand_a_snap_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_a_snap_w[HALF_WIDTH+:HALF_WIDTH] = cand_a_hi_r;
+    assign cand_b_snap_w[0+:HALF_WIDTH] = cand_b_lo_r;
+    assign cand_b_snap_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
 
     scloud_bdd_inv_phi_flat #(
         .Q_WIDTH  (Q_WIDTH),
@@ -215,8 +220,8 @@ module scloud_bdd4_seq_rt
         .Q_WIDTH(Q_WIDTH),
         .COORDS (2*COMPLEX_N)
     ) u_dist_pipe (
-        .cand_a_flat(cand_a_r),
-        .cand_b_flat(cand_b_r),
+        .cand_a_flat(cand_a_snap_w),
+        .cand_b_flat(cand_b_snap_w),
         .target_flat(target_r),
         .clk        (clk),
         .rst_n      (rst_n),
@@ -231,8 +236,8 @@ module scloud_bdd4_seq_rt
 
     always @(posedge clk) begin
         if (state == ST_PREP_DIST) begin
-            cand_a_r <= cand_a_w;
-            cand_b_r <= cand_b_w;
+            cand_a_hi_r <= cand_a_w[HALF_WIDTH+:HALF_WIDTH];
+            cand_b_lo_r <= cand_b_w[0+:HALF_WIDTH];
         end
     end
 
@@ -241,8 +246,6 @@ module scloud_bdd4_seq_rt
             state        <= ST_IDLE;
             tau_sel_r    <= 1'b0;
             target_r     <= {TOTAL_WIDTH{1'b0}};
-            target_l_r   <= {HALF_WIDTH{1'b0}};
-            target_r_r   <= {HALF_WIDTH{1'b0}};
             y_l_r        <= {HALF_WIDTH{1'b0}};
             y_r_r        <= {HALF_WIDTH{1'b0}};
             z_a_in_r     <= {HALF_WIDTH{1'b0}};
@@ -260,8 +263,6 @@ module scloud_bdd4_seq_rt
                     if (start_ready && start) begin
                         tau_sel_r  <= tau_sel;
                         target_r   <= target_flat;
-                        target_l_r <= target_flat[0+:HALF_WIDTH];
-                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
                         state      <= ST_BDD_Y;
                     end
@@ -290,7 +291,7 @@ module scloud_bdd4_seq_rt
                 end
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
+                        decoded_flat <= dist_select_a ? cand_a_snap_w : cand_b_snap_w;
                         state        <= ST_DONE;
                     end
                 end
@@ -345,16 +346,14 @@ module scloud_bdd8_seq_rt
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
-    reg [HALF_WIDTH-1:0]  target_l_r;
-    reg [HALF_WIDTH-1:0]  target_r_r;
     reg [HALF_WIDTH-1:0]  y_l_r;
     reg [HALF_WIDTH-1:0]  y_r_r;
     reg [HALF_WIDTH-1:0]  z_a_in_r;
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
-    reg [TOTAL_WIDTH-1:0] cand_a_r;
-    reg [TOTAL_WIDTH-1:0] cand_b_r;
+    reg [HALF_WIDTH-1:0]  cand_a_hi_r;
+    reg [HALF_WIDTH-1:0]  cand_b_lo_r;
 
     wire child_start;
     wire child_a_ready;
@@ -373,6 +372,8 @@ module scloud_bdd8_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_snap_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_snap_w;
     wire dist_ready;
     wire dist_start;
     wire dist_done;
@@ -417,11 +418,16 @@ module scloud_bdd8_seq_rt
     generate
         for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
             assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
             assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
         end
     endgenerate
+
+    assign cand_a_snap_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_a_snap_w[HALF_WIDTH+:HALF_WIDTH] = cand_a_hi_r;
+    assign cand_b_snap_w[0+:HALF_WIDTH] = cand_b_lo_r;
+    assign cand_b_snap_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
 
     scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_a (
         .d_flat(diff_a_w),
@@ -461,8 +467,8 @@ module scloud_bdd8_seq_rt
         .Q_WIDTH(Q_WIDTH),
         .COORDS (2*COMPLEX_N)
     ) u_dist_pipe (
-        .cand_a_flat(cand_a_r),
-        .cand_b_flat(cand_b_r),
+        .cand_a_flat(cand_a_snap_w),
+        .cand_b_flat(cand_b_snap_w),
         .target_flat(target_r),
         .clk        (clk),
         .rst_n      (rst_n),
@@ -477,8 +483,8 @@ module scloud_bdd8_seq_rt
 
     always @(posedge clk) begin
         if (state == ST_PREP_DIST) begin
-            cand_a_r <= cand_a_w;
-            cand_b_r <= cand_b_w;
+            cand_a_hi_r <= cand_a_w[HALF_WIDTH+:HALF_WIDTH];
+            cand_b_lo_r <= cand_b_w[0+:HALF_WIDTH];
         end
     end
 
@@ -487,8 +493,6 @@ module scloud_bdd8_seq_rt
             state        <= ST_IDLE;
             tau_sel_r    <= 1'b0;
             target_r     <= {TOTAL_WIDTH{1'b0}};
-            target_l_r   <= {HALF_WIDTH{1'b0}};
-            target_r_r   <= {HALF_WIDTH{1'b0}};
             y_l_r        <= {HALF_WIDTH{1'b0}};
             y_r_r        <= {HALF_WIDTH{1'b0}};
             z_a_in_r     <= {HALF_WIDTH{1'b0}};
@@ -506,8 +510,6 @@ module scloud_bdd8_seq_rt
                     if (start_ready && start) begin
                         tau_sel_r  <= tau_sel;
                         target_r   <= target_flat;
-                        target_l_r <= target_flat[0+:HALF_WIDTH];
-                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
                         state      <= ST_WAIT_Y;
                     end
@@ -545,7 +547,7 @@ module scloud_bdd8_seq_rt
                 end
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
+                        decoded_flat <= dist_select_a ? cand_a_snap_w : cand_b_snap_w;
                         state        <= ST_DONE;
                     end
                 end
@@ -610,16 +612,14 @@ module scloud_bdd16_seq_rt
     reg tau_sel_r;
 
     reg [TOTAL_WIDTH-1:0] target_r;
-    reg [HALF_WIDTH-1:0]  target_l_r;
-    reg [HALF_WIDTH-1:0]  target_r_r;
     reg [HALF_WIDTH-1:0]  y_l_r;
     reg [HALF_WIDTH-1:0]  y_r_r;
     reg [HALF_WIDTH-1:0]  z_a_in_r;
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
-    reg [TOTAL_WIDTH-1:0] cand_a_r;
-    reg [TOTAL_WIDTH-1:0] cand_b_r;
+    reg [HALF_WIDTH-1:0]  cand_a_hi_r;
+    reg [HALF_WIDTH-1:0]  cand_b_lo_r;
 
     wire child_start;
     wire child_ready;
@@ -634,6 +634,8 @@ module scloud_bdd16_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_snap_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_snap_w;
     wire child_tau_sel;
 
     genvar gi;
@@ -645,7 +647,7 @@ module scloud_bdd16_seq_rt
                          (state == ST_START_ZA) ||
                          (state == ST_START_ZB);
     assign child_target = (state == ST_IDLE)     ? target_flat[0+:HALF_WIDTH] :
-                          (state == ST_START_YR) ? target_r_r :
+                          (state == ST_START_YR) ? target_r[HALF_WIDTH+:HALF_WIDTH] :
                           (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
     scloud_bdd8_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child (
@@ -663,11 +665,16 @@ module scloud_bdd16_seq_rt
     generate
         for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
             assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
             assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
         end
     endgenerate
+
+    assign cand_a_snap_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_a_snap_w[HALF_WIDTH+:HALF_WIDTH] = cand_a_hi_r;
+    assign cand_b_snap_w[0+:HALF_WIDTH] = cand_b_lo_r;
+    assign cand_b_snap_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
 
     scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_a (
         .d_flat(diff_a_w),
@@ -702,14 +709,14 @@ module scloud_bdd16_seq_rt
     endgenerate
 
     assign dist_start = (state == ST_START_DIST);
-    assign dist_cand_a = cand_a_r;
-    assign dist_cand_b = cand_b_r;
+    assign dist_cand_a = cand_a_snap_w;
+    assign dist_cand_b = cand_b_snap_w;
     assign dist_target = target_r;
 
     always @(posedge clk) begin
         if (state == ST_SELECT) begin
-            cand_a_r <= cand_a_w;
-            cand_b_r <= cand_b_w;
+            cand_a_hi_r <= cand_a_w[HALF_WIDTH+:HALF_WIDTH];
+            cand_b_lo_r <= cand_b_w[0+:HALF_WIDTH];
         end
     end
 
@@ -718,8 +725,6 @@ module scloud_bdd16_seq_rt
             state        <= ST_IDLE;
             tau_sel_r    <= 1'b0;
             target_r     <= {TOTAL_WIDTH{1'b0}};
-            target_l_r   <= {HALF_WIDTH{1'b0}};
-            target_r_r   <= {HALF_WIDTH{1'b0}};
             y_l_r        <= {HALF_WIDTH{1'b0}};
             y_r_r        <= {HALF_WIDTH{1'b0}};
             z_a_in_r     <= {HALF_WIDTH{1'b0}};
@@ -737,8 +742,6 @@ module scloud_bdd16_seq_rt
                     if (start_ready && start) begin
                         tau_sel_r  <= tau_sel;
                         target_r   <= target_flat;
-                        target_l_r <= target_flat[0+:HALF_WIDTH];
-                        target_r_r <= target_flat[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
                         state      <= ST_WAIT_YL;
                     end
@@ -782,7 +785,7 @@ module scloud_bdd16_seq_rt
                 ST_START_DIST: state <= ST_WAIT_DIST;
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
+                        decoded_flat <= dist_select_a ? cand_a_snap_w : cand_b_snap_w;
                         state        <= ST_DONE;
                     end
                 end
@@ -845,16 +848,14 @@ module scloud_bdd32_seq_rt
     reg [1:0] target_loaded;
 
     reg [TOTAL_WIDTH-1:0] target_r;
-    reg [HALF_WIDTH-1:0]  target_l_r;
-    reg [HALF_WIDTH-1:0]  target_r_r;
     reg [HALF_WIDTH-1:0]  y_l_r;
     reg [HALF_WIDTH-1:0]  y_r_r;
     reg [HALF_WIDTH-1:0]  z_a_in_r;
     reg [HALF_WIDTH-1:0]  z_b_in_r;
     reg [HALF_WIDTH-1:0]  z_a_r;
     reg [HALF_WIDTH-1:0]  z_b_r;
-    reg [TOTAL_WIDTH-1:0] cand_a_r;
-    reg [TOTAL_WIDTH-1:0] cand_b_r;
+    reg [HALF_WIDTH-1:0]  cand_a_hi_r;
+    reg [HALF_WIDTH-1:0]  cand_b_lo_r;
 
     wire child_start;
     wire child_ready;
@@ -869,6 +870,8 @@ module scloud_bdd32_seq_rt
     wire [HALF_WIDTH-1:0] phi_z_b_w;
     wire [TOTAL_WIDTH-1:0] cand_a_w;
     wire [TOTAL_WIDTH-1:0] cand_b_w;
+    wire [TOTAL_WIDTH-1:0] cand_a_snap_w;
+    wire [TOTAL_WIDTH-1:0] cand_b_snap_w;
     wire dist_start;
     wire dist_done;
     wire dist_select_a;
@@ -898,7 +901,7 @@ module scloud_bdd32_seq_rt
                          (state == ST_START_ZA) ||
                          (state == ST_START_ZB);
     assign child_target = (state == ST_IDLE)     ? target_r[0+:HALF_WIDTH] :
-                          (state == ST_START_YR) ? target_r_r :
+                          (state == ST_START_YR) ? target_r[HALF_WIDTH+:HALF_WIDTH] :
                           (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
     scloud_bdd16_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child (
@@ -922,11 +925,16 @@ module scloud_bdd32_seq_rt
     generate
         for (gi = 0; gi < HALF_COORDS; gi = gi + 1) begin : gen_diff
             assign diff_a_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_r_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[HALF_WIDTH+(gi*Q_WIDTH)+:Q_WIDTH] - y_l_r[(gi*Q_WIDTH)+:Q_WIDTH];
             assign diff_b_w[(gi*Q_WIDTH)+:Q_WIDTH] =
-                target_l_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
+                target_r[(gi*Q_WIDTH)+:Q_WIDTH] - y_r_r[(gi*Q_WIDTH)+:Q_WIDTH];
         end
     endgenerate
+
+    assign cand_a_snap_w[0+:HALF_WIDTH] = y_l_r;
+    assign cand_a_snap_w[HALF_WIDTH+:HALF_WIDTH] = cand_a_hi_r;
+    assign cand_b_snap_w[0+:HALF_WIDTH] = cand_b_lo_r;
+    assign cand_b_snap_w[HALF_WIDTH+:HALF_WIDTH] = y_r_r;
 
     scloud_bdd_inv_phi_flat #(.Q_WIDTH(Q_WIDTH), .COMPLEX_N(HALF_COMPLEX)) u_inv_phi_a (
         .d_flat(diff_a_w),
@@ -963,9 +971,9 @@ module scloud_bdd32_seq_rt
     assign dist_start = (state == ST_START_DIST);
     assign shared_dist_start = child_dist_start || dist_start;
     assign shared_dist_cand_a = (dist_owner_child || child_dist_start) ?
-                                {{HALF_WIDTH{1'b0}}, child_dist_cand_a} : cand_a_r;
+                                {{HALF_WIDTH{1'b0}}, child_dist_cand_a} : cand_a_snap_w;
     assign shared_dist_cand_b = (dist_owner_child || child_dist_start) ?
-                                {{HALF_WIDTH{1'b0}}, child_dist_cand_b} : cand_b_r;
+                                {{HALF_WIDTH{1'b0}}, child_dist_cand_b} : cand_b_snap_w;
     assign shared_dist_target = (dist_owner_child || child_dist_start) ?
                                 {{HALF_WIDTH{1'b0}}, child_dist_target} : target_r;
     assign child_dist_done = shared_dist_done && dist_owner_child;
@@ -994,8 +1002,8 @@ module scloud_bdd32_seq_rt
 
     always @(posedge clk) begin
         if (state == ST_SELECT) begin
-            cand_a_r <= cand_a_w;
-            cand_b_r <= cand_b_w;
+            cand_a_hi_r <= cand_a_w[HALF_WIDTH+:HALF_WIDTH];
+            cand_b_lo_r <= cand_b_w[0+:HALF_WIDTH];
         end
     end
 
@@ -1005,8 +1013,6 @@ module scloud_bdd32_seq_rt
             tau_sel_r    <= 1'b0;
             target_loaded <= 2'b00;
             target_r     <= {TOTAL_WIDTH{1'b0}};
-            target_l_r   <= {HALF_WIDTH{1'b0}};
-            target_r_r   <= {HALF_WIDTH{1'b0}};
             y_l_r        <= {HALF_WIDTH{1'b0}};
             y_r_r        <= {HALF_WIDTH{1'b0}};
             z_a_in_r     <= {HALF_WIDTH{1'b0}};
@@ -1038,8 +1044,6 @@ module scloud_bdd32_seq_rt
                     if (start_ready && start) begin
                         tau_sel_r  <= tau_sel;
                         target_loaded <= 2'b00;
-                        target_l_r <= target_r[0+:HALF_WIDTH];
-                        target_r_r <= target_r[HALF_WIDTH+:HALF_WIDTH];
                         busy       <= 1'b1;
                         state      <= ST_WAIT_YL;
                     end
@@ -1083,7 +1087,7 @@ module scloud_bdd32_seq_rt
                 ST_START_DIST: state <= ST_WAIT_DIST;
                 ST_WAIT_DIST: begin
                     if (dist_done) begin
-                        decoded_flat <= dist_select_a ? cand_a_r : cand_b_r;
+                        decoded_flat <= dist_select_a ? cand_a_snap_w : cand_b_snap_w;
                         state        <= ST_DONE;
                     end
                 end

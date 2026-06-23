@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-06-23 - BDD register storage compaction
+
+### Changed
+
+- Removed the duplicated registered low/high target halves from the BDD4,
+  BDD8, BDD16, and BDD32 sequential kernels. The datapaths now slice the
+  stable transaction target register directly.
+- Replaced each pair of full-width candidate snapshot registers with only the
+  generated candidate halves. Candidate A reuses the registered YL low half,
+  while candidate B reuses the registered YR high half.
+- The elaborated hierarchy removes 1,536 bits of explicit register storage
+  before synthesis, including the two resident BDD4 instances, without
+  changing interfaces, arithmetic, DSP use, or transaction latency.
+  Post-synthesis FF count and timing remain to be measured.
+
+### Verification
+
+- BDD4 sequential random regression: 100/100 PASS.
+- RCE accelerator tau3/tau4 and fused-operation regression: PASS.
+- Sequential-versus-parallel exact-distance regression: 200 random cases and
+  two tie cases PASS.
+
 ## 2026-06-23 - 200 MHz constrained synthesis timing closure
 
 ### Measured result
