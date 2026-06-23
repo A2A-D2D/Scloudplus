@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-06-23 - 200 MHz constrained synthesis timing closure
+
+### Measured result
+
+- Vivado 2019.1 standalone synthesis for XC7A200T meets the 5.000 ns clock:
+  WNS is +0.435 ns, TNS is 0, and there are zero failing setup endpoints.
+- The remaining worst path is a registered four-term half-sum inside the
+  BDD8 parallel distance engine. Its data-path delay is 4.187 ns with ten
+  logic levels, safely below the constrained period at synthesis.
+- Utilization is 8,618 LUT, 8,211 FF, and 40 DSP48 blocks. Compared with the
+  pre-sum-pipeline run, LUT decreases by 50 and FF increases by 387.
+- DRC still reports 40 MREG recommendations and standalone-top I/O warnings.
+  The MREG warnings are no longer timing blockers and should not trigger more
+  fabric pipeline stages without implementation evidence.
+- Power is 0.659 W total and 0.526 W dynamic at Low confidence. Standalone
+  external I/O and missing activity prevent sign-off use of these values.
+
+### Decision
+
+- Stop adding standalone RTL pipeline stages now that the real 200 MHz clock
+  constraint is met at synthesis.
+- Next closure step is integrated RCE subsystem implementation with real
+  DPRAM/internal wiring, placement, routing, clocking, and switching activity.
+- Reopen RTL pipelining only if integrated post-route timing fails on an
+  identified internal path.
+
 ## 2026-06-23 - Two-stage distance sum reduction
 
 ### Constrained synthesis trigger
