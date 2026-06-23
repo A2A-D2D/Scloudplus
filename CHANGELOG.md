@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-06-23 - Hierarchical child-launch timing isolation
+
+### Constrained synthesis trigger
+
+- BDD register compaction reduced utilization from 8,618 LUT / 8,211 FF to
+  8,552 LUT / 7,268 FF at 40 DSP48 blocks, recovering 943 synthesized FFs.
+- WNS regressed from +0.435 ns to -0.634 ns, with TNS of -76.255 ns across
+  212 endpoints. The worst path is no longer a distance datapath: it crosses
+  the BDD32, BDD16, and BDD8 child-start control hierarchy before ending at a
+  BDD4 target/tau register clock enable. Route delay is 73.9 percent.
+- Estimated power decreased from 0.659 W to 0.582 W, but remains Low
+  confidence because the standalone I/O activity is not representative.
+
+### Changed
+
+- Added an explicit first-child launch state to BDD8, BDD16, and BDD32.
+  Parent start now captures the transaction locally; only a registered local
+  state launches the next hierarchy level on the following cycle.
+- Removed the combinational same-cycle propagation of parent start, tau, and
+  target data through multiple BDD levels. The existing four-bit state
+  registers cover the new encodings, so no wide datapath storage is restored.
+- One BDD32 call gains 21 fixed cycles: one at BDD32, four BDD16 launches, and
+  sixteen BDD8 launches. Arithmetic, strict tie behavior, DSP count, and
+  external interfaces are unchanged.
+
+### Verification
+
+- Pure Verilog-2001 check: PASS.
+- BDD4 random regression: 100/100 PASS.
+- Exact distance regression: 200 random cases and two tie cases PASS.
+- RCE tau3/tau4, two/four-block, and fused-operation regression: PASS.
+- Updated WNS/TNS require a new constrained synthesis run.
+
 ## 2026-06-23 - BDD register storage compaction
 
 ### Changed

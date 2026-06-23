@@ -341,6 +341,7 @@ module scloud_bdd8_seq_rt
     localparam [3:0] ST_START_DIST = 4'd6;
     localparam [3:0] ST_WAIT_DIST  = 4'd7;
     localparam [3:0] ST_DONE       = 4'd8;
+    localparam [3:0] ST_START_Y    = 4'd9;
 
     reg [3:0] state;
     reg tau_sel_r;
@@ -383,13 +384,12 @@ module scloud_bdd8_seq_rt
     genvar gi;
 
     assign start_ready = (state == ST_IDLE);
-    assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
-    assign child_start = ((state == ST_IDLE) && start_ready && start) ||
-                         (state == ST_START_Z);
-    assign child_a_target = (state == ST_IDLE) ? target_flat[0+:HALF_WIDTH] :
-                                                z_a_in_r;
-    assign child_b_target = (state == ST_IDLE) ? target_flat[HALF_WIDTH+:HALF_WIDTH] :
-                                                z_b_in_r;
+    assign child_tau_sel = tau_sel_r;
+    assign child_start = (state == ST_START_Y) || (state == ST_START_Z);
+    assign child_a_target = (state == ST_START_Y) ? target_r[0+:HALF_WIDTH] :
+                                                   z_a_in_r;
+    assign child_b_target = (state == ST_START_Y) ? target_r[HALF_WIDTH+:HALF_WIDTH] :
+                                                   z_b_in_r;
 
     scloud_bdd4_seq_rt #(.Q_WIDTH(Q_WIDTH)) u_child_a (
         .target_flat (child_a_target),
@@ -511,8 +511,11 @@ module scloud_bdd8_seq_rt
                         tau_sel_r  <= tau_sel;
                         target_r   <= target_flat;
                         busy       <= 1'b1;
-                        state      <= ST_WAIT_Y;
+                        state      <= ST_START_Y;
                     end
+                end
+                ST_START_Y: begin
+                    state <= ST_WAIT_Y;
                 end
                 ST_WAIT_Y: begin
                     busy <= 1'b1;
@@ -607,6 +610,7 @@ module scloud_bdd16_seq_rt
     localparam [3:0] ST_START_DIST = 4'd10;
     localparam [3:0] ST_WAIT_DIST  = 4'd11;
     localparam [3:0] ST_DONE       = 4'd12;
+    localparam [3:0] ST_START_YL   = 4'd13;
 
     reg [3:0] state;
     reg tau_sel_r;
@@ -641,12 +645,12 @@ module scloud_bdd16_seq_rt
     genvar gi;
 
     assign start_ready = (state == ST_IDLE);
-    assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
-    assign child_start = ((state == ST_IDLE) && start_ready && start) ||
+    assign child_tau_sel = tau_sel_r;
+    assign child_start = (state == ST_START_YL) ||
                          (state == ST_START_YR) ||
                          (state == ST_START_ZA) ||
                          (state == ST_START_ZB);
-    assign child_target = (state == ST_IDLE)     ? target_flat[0+:HALF_WIDTH] :
+    assign child_target = (state == ST_START_YL) ? target_r[0+:HALF_WIDTH] :
                           (state == ST_START_YR) ? target_r[HALF_WIDTH+:HALF_WIDTH] :
                           (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
@@ -743,9 +747,10 @@ module scloud_bdd16_seq_rt
                         tau_sel_r  <= tau_sel;
                         target_r   <= target_flat;
                         busy       <= 1'b1;
-                        state      <= ST_WAIT_YL;
+                        state      <= ST_START_YL;
                     end
                 end
+                ST_START_YL: state <= ST_WAIT_YL;
                 ST_WAIT_YL: begin
                     busy <= 1'b1;
                     if (child_done) begin
@@ -842,6 +847,7 @@ module scloud_bdd32_seq_rt
     localparam [3:0] ST_START_DIST = 4'd10;
     localparam [3:0] ST_WAIT_DIST  = 4'd11;
     localparam [3:0] ST_DONE       = 4'd12;
+    localparam [3:0] ST_START_YL   = 4'd13;
 
     reg [3:0] state;
     reg tau_sel_r;
@@ -895,12 +901,12 @@ module scloud_bdd32_seq_rt
 
     assign target_half_ready = (state == ST_IDLE) && !start;
     assign start_ready = (state == ST_IDLE) && (target_loaded == 2'b11);
-    assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
-    assign child_start = ((state == ST_IDLE) && start_ready && start) ||
+    assign child_tau_sel = tau_sel_r;
+    assign child_start = (state == ST_START_YL) ||
                          (state == ST_START_YR) ||
                          (state == ST_START_ZA) ||
                          (state == ST_START_ZB);
-    assign child_target = (state == ST_IDLE)     ? target_r[0+:HALF_WIDTH] :
+    assign child_target = (state == ST_START_YL) ? target_r[0+:HALF_WIDTH] :
                           (state == ST_START_YR) ? target_r[HALF_WIDTH+:HALF_WIDTH] :
                           (state == ST_START_ZA) ? z_a_in_r : z_b_in_r;
 
@@ -1045,9 +1051,10 @@ module scloud_bdd32_seq_rt
                         tau_sel_r  <= tau_sel;
                         target_loaded <= 2'b00;
                         busy       <= 1'b1;
-                        state      <= ST_WAIT_YL;
+                        state      <= ST_START_YL;
                     end
                 end
+                ST_START_YL: state <= ST_WAIT_YL;
                 ST_WAIT_YL: begin
                     busy <= 1'b1;
                     if (child_done) begin
