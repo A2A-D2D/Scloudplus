@@ -14,6 +14,10 @@
 
 int hal_active_backend = HAL_BACKEND_SW;  /* Global, used by hal_msgfunc.c */
 
+/* Verilator availability flag — strong symbol defined in verilator_matmul.cpp */
+__attribute__((weak))
+int _hal_vlt_available = 0;
+
 /* SW backend (implemented in hal_sw_matmul.c) */
 extern void hal_sw_bmm_block(const uint16_t *a_block, const uint8_t *s_block,
                               uint16_t *c_block,
@@ -34,7 +38,27 @@ extern void hal_sw_matmul_sb_e(const int16_t *S, const uint16_t *B,
 extern void hal_sw_matmul_cs(const uint16_t *C1, const int16_t *S,
                               const ScloudPlusPara *para, uint16_t *out);
 
-/* Verilator backend stubs (weak symbols — resolve to NULL if not linked) */
+/* Verilator backend (strong symbols from verilator_matmul.cpp when linked) */
+#ifdef USE_VERILATOR
+extern int  hal_vlt_matmul_init(void);
+extern void hal_vlt_matmul_deinit(void);
+extern int  hal_vlt_matmul_as_e(const uint8_t *seedA, const int16_t *S,
+                                 const uint16_t *E, const ScloudPlusPara *para,
+                                 uint16_t *B);
+extern int  hal_vlt_matmul_sa_e(const uint8_t *seedA, const int16_t *S,
+                                 uint16_t *E, const ScloudPlusPara *para,
+                                 uint16_t *C);
+extern void hal_vlt_matmul_sb_e(const int16_t *S, const uint16_t *B,
+                                 const uint16_t *E, const ScloudPlusPara *para,
+                                 uint16_t *out);
+extern void hal_vlt_matmul_cs(const uint16_t *C1, const int16_t *S,
+                               const ScloudPlusPara *para, uint16_t *out);
+#else
+/* Weak stubs when USE_VERILATOR is not defined */
+__attribute__((weak))
+int hal_vlt_matmul_init(void) { return -1; }
+__attribute__((weak))
+void hal_vlt_matmul_deinit(void) {}
 __attribute__((weak))
 int hal_vlt_matmul_as_e(const uint8_t *seedA, const int16_t *S,
                          const uint16_t *E, const ScloudPlusPara *para,
@@ -50,10 +74,10 @@ void hal_vlt_matmul_sb_e(const int16_t *S, const uint16_t *B,
 __attribute__((weak))
 void hal_vlt_matmul_cs(const uint16_t *C1, const int16_t *S,
                         const ScloudPlusPara *para, uint16_t *out) {}
+#endif
 
 static int verilator_available(void) {
-    /* Check if real Verilator functions are linked (not the weak stubs above) */
-    return 0;  /* SW-only by default; set to 1 when Verilator .cpp is linked */
+    return _hal_vlt_available;
 }
 
 /* =========================================================================
@@ -69,6 +93,7 @@ int hal_init(const char *backend) {
         if (verilator_available()) {
             hal_active_backend = HAL_BACKEND_VERILATOR;
             printf("[HAL] Using Verilator backend\n");
+            hal_vlt_matmul_init();
             return 0;
         } else {
             fprintf(stderr, "[HAL] Verilator not available, using SW backend\n");
@@ -82,7 +107,9 @@ int hal_init(const char *backend) {
 }
 
 void hal_deinit(void) {
-    /* Nothing to do for SW backend */
+    if (hal_active_backend == HAL_BACKEND_VERILATOR && verilator_available()) {
+        hal_vlt_matmul_deinit();
+    }
 }
 
 /* =========================================================================
@@ -110,22 +137,36 @@ int hal_matmul_serial(const uint16_t *A, const int16_t *S,
 int hal_matmul_as_e(const uint8_t *seedA, const int16_t *S,
                     const uint16_t *E, const ScloudPlusPara *para,
                     uint16_t *B) {
+    if (hal_active_backend == HAL_BACKEND_VERILATOR && verilator_available()) {
+        return hal_vlt_matmul_as_e(seedA, S, E, para, B);
+    }
     return hal_sw_matmul_as_e(seedA, S, E, para, B);
 }
 
 int hal_matmul_sa_e(const uint8_t *seedA, const int16_t *S,
                     uint16_t *E, const ScloudPlusPara *para,
                     uint16_t *C) {
+    if (hal_active_backend == HAL_BACKEND_VERILATOR && verilator_available()) {
+        return hal_vlt_matmul_sa_e(seedA, S, E, para, C);
+    }
     return hal_sw_matmul_sa_e(seedA, S, E, para, C);
 }
 
 void hal_matmul_sb_e(const int16_t *S, const uint16_t *B,
                      const uint16_t *E, const ScloudPlusPara *para,
                      uint16_t *out) {
+    if (hal_active_backend == HAL_BACKEND_VERILATOR && verilator_available()) {
+        hal_vlt_matmul_sb_e(S, B, E, para, out);
+        return;
+    }
     hal_sw_matmul_sb_e(S, B, E, para, out);
 }
 
 void hal_matmul_cs(const uint16_t *C1, const int16_t *S,
                    const ScloudPlusPara *para, uint16_t *out) {
+    if (hal_active_backend == HAL_BACKEND_VERILATOR && verilator_available()) {
+        hal_vlt_matmul_cs(C1, S, para, out);
+        return;
+    }
     hal_sw_matmul_cs(C1, S, para, out);
 }

@@ -28,6 +28,7 @@
 
 # SW build artifacts
 sw/build/
+.claude/
 
 # OS files
 .DS_Store
