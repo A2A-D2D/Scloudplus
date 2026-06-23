@@ -362,20 +362,23 @@ module scloud_bdd_distance_seq
     endfunction
 
     localparam CHUNK_BITS = (CHUNKS <= 1) ? 1 : clog2(CHUNKS);
-    localparam [2:0] ST_IDLE      = 3'd0;
-    localparam [2:0] ST_LOAD_DIFF = 3'd1;
-    localparam [2:0] ST_MUL_1     = 3'd2;
-    localparam [2:0] ST_MUL_2     = 3'd3;
-    localparam [2:0] ST_SUM       = 3'd4;
-    localparam [2:0] ST_ACCUM     = 3'd5;
-    localparam [2:0] ST_COMPARE   = 3'd6;
-    localparam [2:0] ST_DONE      = 3'd7;
+    localparam [3:0] ST_IDLE       = 4'd0;
+    localparam [3:0] ST_LOAD_CHUNK = 4'd1;
+    localparam [3:0] ST_LOAD_DIFF  = 4'd2;
+    localparam [3:0] ST_MUL_1      = 4'd3;
+    localparam [3:0] ST_MUL_2      = 4'd4;
+    localparam [3:0] ST_SUM        = 4'd5;
+    localparam [3:0] ST_ACCUM      = 4'd6;
+    localparam [3:0] ST_COMPARE    = 4'd7;
+    localparam [3:0] ST_DONE       = 4'd8;
 
-    reg [2:0] state;
+    reg [3:0] state;
     reg [CHUNK_BITS-1:0] chunk_idx;
     reg phase_b;
     reg [31:0] accum_a;
     reg [31:0] accum_b;
+    reg [(LANES*Q_WIDTH)-1:0] chunk_cand_r;
+    reg [(LANES*Q_WIDTH)-1:0] chunk_target_r;
     reg [(LANES*DIFF_WIDTH)-1:0] diff_pipe_r;
     reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_1_r;
     reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_2_r;
@@ -399,8 +402,8 @@ module scloud_bdd_distance_seq
             wire [Q_WIDTH-1:0] diff_q;
             wire signed [DIFF_WIDTH-1:0] diff_pipe_lane;
 
-            assign diff_q = shifted_cand[(gi*Q_WIDTH)+:Q_WIDTH] -
-                            shifted_target[(gi*Q_WIDTH)+:Q_WIDTH];
+            assign diff_q = chunk_cand_r[(gi*Q_WIDTH)+:Q_WIDTH] -
+                            chunk_target_r[(gi*Q_WIDTH)+:Q_WIDTH];
             assign diff_flat[(gi*DIFF_WIDTH)+:DIFF_WIDTH] =
                 {diff_q[Q_WIDTH-1], diff_q};
             assign diff_pipe_lane =
@@ -425,6 +428,10 @@ module scloud_bdd_distance_seq
      * is reset separately; pipeline data is always overwritten before use.
      */
     always @(posedge clk) begin
+        if (state == ST_LOAD_CHUNK) begin
+            chunk_cand_r <= shifted_cand[0+:(LANES*Q_WIDTH)];
+            chunk_target_r <= shifted_target[0+:(LANES*Q_WIDTH)];
+        end
         if (state == ST_LOAD_DIFF)
             diff_pipe_r <= diff_flat;
         if (state == ST_MUL_1)
@@ -458,8 +465,11 @@ module scloud_bdd_distance_seq
                         accum_a   <= 32'd0;
                         accum_b   <= 32'd0;
                         busy      <= 1'b1;
-                        state     <= ST_LOAD_DIFF;
+                        state     <= ST_LOAD_CHUNK;
                     end
+                end
+                ST_LOAD_CHUNK: begin
+                    state <= ST_LOAD_DIFF;
                 end
                 ST_LOAD_DIFF: begin
                     state <= ST_MUL_1;
@@ -480,10 +490,10 @@ module scloud_bdd_distance_seq
                             distance_a <= accum_a + lane_sum_r;
                             chunk_idx  <= {CHUNK_BITS{1'b0}};
                             phase_b    <= 1'b1;
-                            state      <= ST_LOAD_DIFF;
+                            state      <= ST_LOAD_CHUNK;
                         end else begin
                             chunk_idx <= chunk_idx + 1'b1;
-                            state     <= ST_LOAD_DIFF;
+                            state     <= ST_LOAD_CHUNK;
                         end
                     end else begin
                         accum_b <= accum_b + lane_sum_r;
@@ -492,7 +502,7 @@ module scloud_bdd_distance_seq
                             state      <= ST_COMPARE;
                         end else begin
                             chunk_idx <= chunk_idx + 1'b1;
-                            state     <= ST_LOAD_DIFF;
+                            state     <= ST_LOAD_CHUNK;
                         end
                     end
                 end

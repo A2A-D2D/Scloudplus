@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-06-23 - Shared distance chunk snapshot
+
+### Constrained synthesis trigger
+
+- The hierarchical candidate snapshot synthesis produced 8,923 LUT, 7,643
+  FF, and 40 DSP48 blocks. WNS improved from -3.380 ns to -2.663 ns, TNS
+  improved from -2169.470 ns to -1382.924 ns, and failing setup endpoints
+  fell from 1,386 to 899.
+- The worst 6.854 ns path is now inside `scloud_bdd_distance_seq`: the
+  candidate phase and chunk index drive a wide candidate/target mux and shift,
+  followed by modular subtraction into a DSP input register.
+- DRC is reduced to 40 DSP MREG warnings plus standalone-top I/O warnings.
+  DPIP and PREG warnings are eliminated. Power remains low-confidence at
+  0.618 W because the synthesized standalone top lacks real switching data.
+
+### Changed
+
+- Added an 8-lane candidate/target chunk snapshot stage before modular
+  subtraction in the shared sequential distance engine.
+- Separated phase/chunk wide-bus selection from the difference and DSP input
+  stage without changing distance arithmetic, DSP count, or interfaces.
+- Each candidate chunk gains one fixed cycle; only 192 data bits are added to
+  the shared engine rather than another full-width candidate copy.
+
+### Verification
+
+- Exact shared distance comparison passes 200 random cases plus two ties.
+- BDD4 tau3/tau4 recursive-reference comparison passes 100 random targets.
+- RCE two/four-block fused and non-fused regressions pass.
+- Post-change timing and utilization require a new constrained synthesis.
+
 ## 2026-06-22 - Hierarchical candidate snapshot pipeline
 
 ### Constrained synthesis trigger

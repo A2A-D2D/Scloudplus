@@ -978,6 +978,12 @@ BDD4 流水后的综合结果为 8,850 LUT、5,546 FF、40 DSP，WNS 从 -11.392
 
 BDD4、BDD8、BDD16 和 BDD32 均新增候选 A/B 快照寄存器。各层先锁存完整候选，下一拍通过独立 launch 状态启动 distance，使 candidate modular add 与 candidate-to-target subtraction 分属不同周期。显式 launch 状态同时避免本地 distance 的 `done`/`ready` 重叠造成重复 start。该改动保持 40 DSP、12-bit 模回绕、32-bit 精确距离、strict `<` tie-break 和外部接口不变；BDD4 100 组随机参考等价及 RCE 端到端回归通过，更新后的时序和资源仍以重新综合为准。
 
+### 22.10 共享距离 chunk 快照
+
+分层候选快照后的综合结果为 8,923 LUT、7,643 FF、40 DSP。WNS 从 -3.380 ns 改善到 -2.663 ns，TNS 从 -2169.470 ns 改善到 -1382.924 ns，失败端点从 1,386 降到 899。最差路径位于共享 `scloud_bdd_distance_seq`：`phase_b/chunk_idx -> candidate/target宽mux与移位 -> 12-bit diff -> DSP input register`，数据路径为 6.854 ns，其中路由占 69%。
+
+共享距离引擎在差值前新增一个 8-lane candidate/target chunk 快照状态，将宽总线选择与模差值/DSP 输入拆成两拍。只增加 192-bit 共享数据寄存器，不增加全宽候选缓存，不修改 40 DSP、距离精度、tie-break 或接口；每个 8-lane chunk 增加 1 拍。顺序距离 200 组随机加 2 组 tie、BDD4 100 组随机参考以及 RCE 端到端回归通过。DRC 已只剩 40 个 MREG 告警及 standalone I/O 告警；更新时序仍以重新综合为准。
+
 ## 23. DS 辅助 HW/SW KAT 验证状态
 
 DS 辅助加入了 openHiTLS KAT 解析、SW HAL、KEM 功能模型和 RTL cosim 验证链。KAT 输入共 9 组，ss16、ss24、ss32 各 3 组。
