@@ -106,7 +106,7 @@ module scloud_bdd4_seq_rt
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE) && dist_ready;
+    assign start_ready = (state == ST_IDLE);
 
     scloud_bdd_round_coord_q_rt #(.Q_WIDTH(Q_WIDTH)) u_round_l_re (
         .tau_sel(tau_sel_r),
@@ -381,8 +381,7 @@ module scloud_bdd8_seq_rt
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE) && child_a_ready && child_b_ready &&
-                         dist_ready;
+    assign start_ready = (state == ST_IDLE);
     assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
     assign child_start = ((state == ST_IDLE) && start_ready && start) ||
                          (state == ST_START_Z);
@@ -639,7 +638,7 @@ module scloud_bdd16_seq_rt
 
     genvar gi;
 
-    assign start_ready = (state == ST_IDLE) && child_ready;
+    assign start_ready = (state == ST_IDLE);
     assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
     assign child_start = ((state == ST_IDLE) && start_ready && start) ||
                          (state == ST_START_YR) ||
@@ -892,8 +891,7 @@ module scloud_bdd32_seq_rt
     genvar gi;
 
     assign target_half_ready = (state == ST_IDLE) && !start;
-    assign start_ready = (state == ST_IDLE) && child_ready &&
-                         (target_loaded == 2'b11);
+    assign start_ready = (state == ST_IDLE) && (target_loaded == 2'b11);
     assign child_tau_sel = (state == ST_IDLE) ? tau_sel : tau_sel_r;
     assign child_start = ((state == ST_IDLE) && start_ready && start) ||
                          (state == ST_START_YR) ||

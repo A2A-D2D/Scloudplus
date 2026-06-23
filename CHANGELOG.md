@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-06-23 - BDD ready-chain decoupling and MREG rollback
+
+### Constrained synthesis result
+
+- The chunk snapshot plus third product-register synthesis produced 8,704
+  LUT, 8,867 FF, and 40 DSP48 blocks. WNS improved from -2.663 ns to
+  -1.966 ns, TNS improved from -1382.924 ns to -560.686 ns, and failing
+  endpoints fell from 899 to 513.
+- The additional product registers were not absorbed into DSP MREG: all 40
+  MREG warnings remain, while slice FF increased by about 1,224.
+- The worst 6.584 ns path is now a seven-LUT, cross-hierarchy ready/start
+  control chain ending at a BDD4 target-register clock enable. Route delay is
+  77.5 percent. QoR also flags combined LUTs on this control path.
+
+### Changed
+
+- Decoupled BDD4/BDD8/BDD16 external `start_ready` from child and local
+  distance readiness. Each node now reports readiness from its own IDLE state;
+  BDD32 additionally requires both target halves loaded.
+- This is safe because node `done` is emitted only after local distance and
+  child transactions complete, and explicit one-cycle launch states prevent
+  ready/done overlap from retriggering work.
+- Removed the unabsorbed third product-register stage. The effective chunk
+  snapshot and two product stages remain, recovering about 1K intended slice
+  FF without changing arithmetic or interfaces.
+
+### Verification
+
+- Parallel and sequential distance tests each pass 200 random cases plus two
+  ties.
+- BDD4 recursive-reference comparison passes 100 tau3/tau4 random targets.
+- RCE two/four-block fused and non-fused regressions pass.
+- Timing, FF recovery, and control-route improvement require a new synthesis.
+
 ## 2026-06-23 - DSP multiplier register inference stage
 
 ### Trigger

@@ -988,6 +988,12 @@ BDD4、BDD8、BDD16 和 BDD32 均新增候选 A/B 快照寄存器。各层先锁
 
 当前 DRC 中 DPIP 与 PREG 告警已经清零，只剩全部 40 个 DSP 的 `MREG=0`。按照 Vivado 2019.1 对 inferred multiplier 的建议，在并行双候选距离核和共享顺序距离核的平方乘积后再增加一级连续产品寄存器，求和树改为读取第三级产品寄存器。该改动不改变平方、累加顺序、strict `<`、DSP 数量或接口；本地距离事务增加 1 拍，共享引擎每个 8-lane chunk 增加 1 拍。两类距离单测各 200 组随机加 2 组 tie 以及 RCE 端到端回归通过。MREG 是否被吸收到 DSP48、slice FF 是否增加以及时序/功耗变化必须由新综合报告确认。
 
+### 22.12 BDD ready 控制链去耦与无效 MREG 补拍回收
+
+补充第三级产品寄存后的综合结果为 8,704 LUT、8,867 FF、40 DSP，WNS 从 -2.663 ns 改善到 -1.966 ns，TNS 从 -1382.924 ns 改善到 -560.686 ns，失败端点降到 513。但 40 个 MREG 告警完全未减少，额外寄存器成为约 1,224 个 slice FF。最差路径也转移为 BDD4/BDD8/BDD16 间的 `child_ready/start_ready` 组合回传链，终点为目标寄存器 CE，6.584 ns 中路由占 77.5%。
+
+BDD4、BDD8 和 BDD16 的对外 `start_ready` 改为仅由本节点 IDLE 产生；BDD32 再附加 two-half loaded 条件。节点 `done` 已保证子核和本地 distance 完成，独立 launch 状态又阻止 ready/done 重叠重复启动，因此无需把内部 ready 层层组合回传。同时撤销未被 DSP 吸收的第三级产品寄存，保留 chunk snapshot 与原两级产品寄存，预计回收约 1K slice FF 并降低时钟及控制路由负载。全部距离、BDD4 参考和 RCE 回归通过；更新 PPA 以新综合为准。
+
 ## 23. DS 辅助 HW/SW KAT 验证状态
 
 DS 辅助加入了 openHiTLS KAT 解析、SW HAL、KEM 功能模型和 RTL cosim 验证链。KAT 输入共 9 组，ss16、ss24、ss32 各 3 组。

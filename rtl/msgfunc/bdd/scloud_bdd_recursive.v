@@ -190,10 +190,9 @@ module scloud_bdd_distance_pair_pipe
     localparam [2:0] ST_LOAD_DIFF = 3'd1;
     localparam [2:0] ST_MUL_1     = 3'd2;
     localparam [2:0] ST_MUL_2     = 3'd3;
-    localparam [2:0] ST_MUL_3     = 3'd4;
-    localparam [2:0] ST_SUM       = 3'd5;
-    localparam [2:0] ST_COMPARE   = 3'd6;
-    localparam [2:0] ST_DONE      = 3'd7;
+    localparam [2:0] ST_SUM       = 3'd4;
+    localparam [2:0] ST_COMPARE   = 3'd5;
+    localparam [2:0] ST_DONE      = 3'd6;
 
     reg [2:0] state;
     reg [(COORDS*DIFF_WIDTH)-1:0] diff_a_r;
@@ -202,8 +201,6 @@ module scloud_bdd_distance_pair_pipe
     reg [(COORDS*TERM_WIDTH)-1:0] sq_b_1_r;
     reg [(COORDS*TERM_WIDTH)-1:0] sq_a_2_r;
     reg [(COORDS*TERM_WIDTH)-1:0] sq_b_2_r;
-    reg [(COORDS*TERM_WIDTH)-1:0] sq_a_3_r;
-    reg [(COORDS*TERM_WIDTH)-1:0] sq_b_3_r;
     reg [31:0] sum_a_r;
     reg [31:0] sum_b_r;
 
@@ -246,7 +243,7 @@ module scloud_bdd_distance_pair_pipe
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
     ) u_sum_a (
-        .terms_flat(sq_a_3_r),
+        .terms_flat(sq_a_2_r),
         .sum_out   (sum_a_w)
     );
 
@@ -255,7 +252,7 @@ module scloud_bdd_distance_pair_pipe
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
     ) u_sum_b (
-        .terms_flat(sq_b_3_r),
+        .terms_flat(sq_b_2_r),
         .sum_out   (sum_b_w)
     );
 
@@ -276,10 +273,6 @@ module scloud_bdd_distance_pair_pipe
         if (state == ST_MUL_2) begin
             sq_a_2_r <= sq_a_1_r;
             sq_b_2_r <= sq_b_1_r;
-        end
-        if (state == ST_MUL_3) begin
-            sq_a_3_r <= sq_a_2_r;
-            sq_b_3_r <= sq_b_2_r;
         end
         if (state == ST_SUM) begin
             sum_a_r <= sum_a_w;
@@ -307,8 +300,7 @@ module scloud_bdd_distance_pair_pipe
                 end
                 ST_LOAD_DIFF: state <= ST_MUL_1;
                 ST_MUL_1:     state <= ST_MUL_2;
-                ST_MUL_2:     state <= ST_MUL_3;
-                ST_MUL_3:     state <= ST_SUM;
+                ST_MUL_2:     state <= ST_SUM;
                 ST_SUM:       state <= ST_COMPARE;
                 ST_COMPARE: begin
                     distance_a <= sum_a_r;
@@ -375,11 +367,10 @@ module scloud_bdd_distance_seq
     localparam [3:0] ST_LOAD_DIFF  = 4'd2;
     localparam [3:0] ST_MUL_1      = 4'd3;
     localparam [3:0] ST_MUL_2      = 4'd4;
-    localparam [3:0] ST_MUL_3      = 4'd5;
-    localparam [3:0] ST_SUM        = 4'd6;
-    localparam [3:0] ST_ACCUM      = 4'd7;
-    localparam [3:0] ST_COMPARE    = 4'd8;
-    localparam [3:0] ST_DONE       = 4'd9;
+    localparam [3:0] ST_SUM        = 4'd5;
+    localparam [3:0] ST_ACCUM      = 4'd6;
+    localparam [3:0] ST_COMPARE    = 4'd7;
+    localparam [3:0] ST_DONE       = 4'd8;
 
     reg [3:0] state;
     reg [CHUNK_BITS-1:0] chunk_idx;
@@ -391,7 +382,6 @@ module scloud_bdd_distance_seq
     reg [(LANES*DIFF_WIDTH)-1:0] diff_pipe_r;
     reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_1_r;
     reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_2_r;
-    reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_3_r;
     reg [31:0] lane_sum_r;
 
     wire [(COORDS*Q_WIDTH)-1:0] active_cand;
@@ -428,7 +418,7 @@ module scloud_bdd_distance_seq
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
     ) u_lane_sum (
-        .terms_flat(sq_pipe_3_r),
+        .terms_flat(sq_pipe_2_r),
         .sum_out   (lane_sum_w)
     );
 
@@ -448,8 +438,6 @@ module scloud_bdd_distance_seq
             sq_pipe_1_r <= sq_flat;
         if (state == ST_MUL_2)
             sq_pipe_2_r <= sq_pipe_1_r;
-        if (state == ST_MUL_3)
-            sq_pipe_3_r <= sq_pipe_2_r;
         if (state == ST_SUM)
             lane_sum_r <= lane_sum_w;
     end
@@ -490,9 +478,6 @@ module scloud_bdd_distance_seq
                     state <= ST_MUL_2;
                 end
                 ST_MUL_2: begin
-                    state <= ST_MUL_3;
-                end
-                ST_MUL_3: begin
                     state <= ST_SUM;
                 end
                 ST_SUM: begin
