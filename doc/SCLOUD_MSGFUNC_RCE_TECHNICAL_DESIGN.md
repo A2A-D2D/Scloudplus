@@ -994,6 +994,12 @@ BDD4、BDD8、BDD16 和 BDD32 均新增候选 A/B 快照寄存器。各层先锁
 
 BDD4、BDD8 和 BDD16 的对外 `start_ready` 改为仅由本节点 IDLE 产生；BDD32 再附加 two-half loaded 条件。节点 `done` 已保证子核和本地 distance 完成，独立 launch 状态又阻止 ready/done 重叠重复启动，因此无需把内部 ready 层层组合回传。同时撤销未被 DSP 吸收的第三级产品寄存，保留 chunk snapshot 与原两级产品寄存，预计回收约 1K slice FF 并降低时钟及控制路由负载。全部距离、BDD4 参考和 RCE 回归通过；更新 PPA 以新综合为准。
 
+### 22.13 距离求和树两级归约
+
+ready 控制链去耦后的综合结果为 8,668 LUT、7,824 FF、40 DSP。WNS 从 -1.966 ns 改善到 -1.326 ns，TNS 从 -560.686 ns 大幅改善到 -60.878 ns，失败端点从 513 降到 72。当前最差路径为已寄存平方乘积到 `sum_a_r` 的 8 项求和树，包含 13 级逻辑和 10 个 CARRY4，数据路径 6.192 ns；QoR 统计同类关键路径 138 条。
+
+并行双候选距离核将 8 项平方分为 4+4 两组，先分别求和并寄存，再用下一拍完成最终 32-bit 相加；共享 8-lane 顺序距离核采用相同结构。四坐标 BDD4 也按 2+2 分组复用该参数化实现。该改动保持精确 32-bit 距离、strict `<`、40 DSP 和接口不变，本地距离事务及共享引擎每个 chunk 各增加 1 拍。两类距离单测各 200 组随机加 2 组 tie 与 RCE 回归通过；更新时序和 FF 代价以新综合为准。
+
 ## 23. DS 辅助 HW/SW KAT 验证状态
 
 DS 辅助加入了 openHiTLS KAT 解析、SW HAL、KEM 功能模型和 RTL cosim 验证链。KAT 输入共 9 组，ss16、ss24、ss32 各 3 组。

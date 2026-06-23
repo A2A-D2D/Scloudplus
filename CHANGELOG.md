@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-06-23 - Two-stage distance sum reduction
+
+### Constrained synthesis trigger
+
+- Ready-chain decoupling recovered slice storage and reduced the design to
+  8,668 LUT and 7,824 FF at 40 DSP48 blocks.
+- WNS improved from -1.966 ns to -1.326 ns, TNS improved from -560.686 ns to
+  -60.878 ns, and failing endpoints fell from 513 to 72.
+- The worst 6.192 ns path is now the eight-term squared-distance sum tree from
+  registered products to `sum_a_r`: 13 logic levels including ten CARRY4s.
+  QoR reports 138 paths with this structure.
+
+### Changed
+
+- Split each parallel candidate distance sum into two half-width term groups.
+  The two half sums are registered, then combined by one 32-bit addition in
+  the following cycle.
+- Applied the same two-stage reduction to the shared eight-lane sequential
+  distance engine.
+- Preserved exact 32-bit sums, candidate comparison, DSP count, and all
+  interfaces. Each local distance transaction and each shared chunk gains one
+  fixed cycle.
+
+### Verification
+
+- Parallel and sequential distance tests each pass 200 random cases plus two
+  ties.
+- RCE two/four-block fused and non-fused regressions pass.
+- Timing, FF cost, and remaining failing endpoints require a new synthesis.
+
 ## 2026-06-23 - BDD ready-chain decoupling and MREG rollback
 
 ### Constrained synthesis result

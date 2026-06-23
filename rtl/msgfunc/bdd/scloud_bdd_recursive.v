@@ -185,14 +185,16 @@ module scloud_bdd_distance_pair_pipe
 
     localparam TERM_WIDTH = (2 * Q_WIDTH) + 2;
     localparam DIFF_WIDTH = Q_WIDTH + 1;
+    localparam HALF_COORDS = COORDS / 2;
 
     localparam [2:0] ST_IDLE      = 3'd0;
     localparam [2:0] ST_LOAD_DIFF = 3'd1;
     localparam [2:0] ST_MUL_1     = 3'd2;
     localparam [2:0] ST_MUL_2     = 3'd3;
-    localparam [2:0] ST_SUM       = 3'd4;
-    localparam [2:0] ST_COMPARE   = 3'd5;
-    localparam [2:0] ST_DONE      = 3'd6;
+    localparam [2:0] ST_SUM_PART  = 3'd4;
+    localparam [2:0] ST_SUM_FINAL = 3'd5;
+    localparam [2:0] ST_COMPARE   = 3'd6;
+    localparam [2:0] ST_DONE      = 3'd7;
 
     reg [2:0] state;
     reg [(COORDS*DIFF_WIDTH)-1:0] diff_a_r;
@@ -201,6 +203,10 @@ module scloud_bdd_distance_pair_pipe
     reg [(COORDS*TERM_WIDTH)-1:0] sq_b_1_r;
     reg [(COORDS*TERM_WIDTH)-1:0] sq_a_2_r;
     reg [(COORDS*TERM_WIDTH)-1:0] sq_b_2_r;
+    reg [31:0] sum_a_lo_r;
+    reg [31:0] sum_a_hi_r;
+    reg [31:0] sum_b_lo_r;
+    reg [31:0] sum_b_hi_r;
     reg [31:0] sum_a_r;
     reg [31:0] sum_b_r;
 
@@ -208,6 +214,10 @@ module scloud_bdd_distance_pair_pipe
     wire [(COORDS*DIFF_WIDTH)-1:0] diff_b_w;
     wire [(COORDS*TERM_WIDTH)-1:0] sq_a_w;
     wire [(COORDS*TERM_WIDTH)-1:0] sq_b_w;
+    wire [31:0] sum_a_lo_w;
+    wire [31:0] sum_a_hi_w;
+    wire [31:0] sum_b_lo_w;
+    wire [31:0] sum_b_hi_w;
     wire [31:0] sum_a_w;
     wire [31:0] sum_b_w;
 
@@ -239,22 +249,43 @@ module scloud_bdd_distance_pair_pipe
     endgenerate
 
     scloud_bdd_sum_tree #(
-        .TERMS    (COORDS),
+        .TERMS    (HALF_COORDS),
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
-    ) u_sum_a (
-        .terms_flat(sq_a_2_r),
-        .sum_out   (sum_a_w)
+    ) u_sum_a_lo (
+        .terms_flat(sq_a_2_r[0+:(HALF_COORDS*TERM_WIDTH)]),
+        .sum_out   (sum_a_lo_w)
     );
 
     scloud_bdd_sum_tree #(
-        .TERMS    (COORDS),
+        .TERMS    (HALF_COORDS),
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
-    ) u_sum_b (
-        .terms_flat(sq_b_2_r),
-        .sum_out   (sum_b_w)
+    ) u_sum_a_hi (
+        .terms_flat(sq_a_2_r[(HALF_COORDS*TERM_WIDTH)+:(HALF_COORDS*TERM_WIDTH)]),
+        .sum_out   (sum_a_hi_w)
     );
+
+    scloud_bdd_sum_tree #(
+        .TERMS    (HALF_COORDS),
+        .IN_WIDTH (TERM_WIDTH),
+        .OUT_WIDTH(32)
+    ) u_sum_b_lo (
+        .terms_flat(sq_b_2_r[0+:(HALF_COORDS*TERM_WIDTH)]),
+        .sum_out   (sum_b_lo_w)
+    );
+
+    scloud_bdd_sum_tree #(
+        .TERMS    (HALF_COORDS),
+        .IN_WIDTH (TERM_WIDTH),
+        .OUT_WIDTH(32)
+    ) u_sum_b_hi (
+        .terms_flat(sq_b_2_r[(HALF_COORDS*TERM_WIDTH)+:(HALF_COORDS*TERM_WIDTH)]),
+        .sum_out   (sum_b_hi_w)
+    );
+
+    assign sum_a_w = sum_a_lo_r + sum_a_hi_r;
+    assign sum_b_w = sum_b_lo_r + sum_b_hi_r;
 
     /*
      * Pipeline data intentionally has no asynchronous reset. It is fully
@@ -274,7 +305,13 @@ module scloud_bdd_distance_pair_pipe
             sq_a_2_r <= sq_a_1_r;
             sq_b_2_r <= sq_b_1_r;
         end
-        if (state == ST_SUM) begin
+        if (state == ST_SUM_PART) begin
+            sum_a_lo_r <= sum_a_lo_w;
+            sum_a_hi_r <= sum_a_hi_w;
+            sum_b_lo_r <= sum_b_lo_w;
+            sum_b_hi_r <= sum_b_hi_w;
+        end
+        if (state == ST_SUM_FINAL) begin
             sum_a_r <= sum_a_w;
             sum_b_r <= sum_b_w;
         end
@@ -300,8 +337,9 @@ module scloud_bdd_distance_pair_pipe
                 end
                 ST_LOAD_DIFF: state <= ST_MUL_1;
                 ST_MUL_1:     state <= ST_MUL_2;
-                ST_MUL_2:     state <= ST_SUM;
-                ST_SUM:       state <= ST_COMPARE;
+                ST_MUL_2:     state <= ST_SUM_PART;
+                ST_SUM_PART:  state <= ST_SUM_FINAL;
+                ST_SUM_FINAL: state <= ST_COMPARE;
                 ST_COMPARE: begin
                     distance_a <= sum_a_r;
                     distance_b <= sum_b_r;
@@ -347,6 +385,7 @@ module scloud_bdd_distance_seq
     localparam TERM_WIDTH = (2 * Q_WIDTH) + 2;
     localparam DIFF_WIDTH = Q_WIDTH + 1;
     localparam CHUNKS     = COORDS / LANES;
+    localparam HALF_LANES = LANES / 2;
 
     function integer clog2;
         input integer value;
@@ -367,10 +406,11 @@ module scloud_bdd_distance_seq
     localparam [3:0] ST_LOAD_DIFF  = 4'd2;
     localparam [3:0] ST_MUL_1      = 4'd3;
     localparam [3:0] ST_MUL_2      = 4'd4;
-    localparam [3:0] ST_SUM        = 4'd5;
-    localparam [3:0] ST_ACCUM      = 4'd6;
-    localparam [3:0] ST_COMPARE    = 4'd7;
-    localparam [3:0] ST_DONE       = 4'd8;
+    localparam [3:0] ST_SUM_PART   = 4'd5;
+    localparam [3:0] ST_SUM_FINAL  = 4'd6;
+    localparam [3:0] ST_ACCUM      = 4'd7;
+    localparam [3:0] ST_COMPARE    = 4'd8;
+    localparam [3:0] ST_DONE       = 4'd9;
 
     reg [3:0] state;
     reg [CHUNK_BITS-1:0] chunk_idx;
@@ -382,6 +422,8 @@ module scloud_bdd_distance_seq
     reg [(LANES*DIFF_WIDTH)-1:0] diff_pipe_r;
     reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_1_r;
     reg [(LANES*TERM_WIDTH)-1:0] sq_pipe_2_r;
+    reg [31:0] lane_sum_lo_r;
+    reg [31:0] lane_sum_hi_r;
     reg [31:0] lane_sum_r;
 
     wire [(COORDS*Q_WIDTH)-1:0] active_cand;
@@ -389,6 +431,8 @@ module scloud_bdd_distance_seq
     wire [(COORDS*Q_WIDTH)-1:0] shifted_target;
     wire [(LANES*DIFF_WIDTH)-1:0] diff_flat;
     wire [(LANES*TERM_WIDTH)-1:0] sq_flat;
+    wire [31:0] lane_sum_lo_w;
+    wire [31:0] lane_sum_hi_w;
     wire [31:0] lane_sum_w;
 
     assign start_ready = (state == ST_IDLE);
@@ -414,13 +458,24 @@ module scloud_bdd_distance_seq
     endgenerate
 
     scloud_bdd_sum_tree #(
-        .TERMS    (LANES),
+        .TERMS    (HALF_LANES),
         .IN_WIDTH (TERM_WIDTH),
         .OUT_WIDTH(32)
-    ) u_lane_sum (
-        .terms_flat(sq_pipe_2_r),
-        .sum_out   (lane_sum_w)
+    ) u_lane_sum_lo (
+        .terms_flat(sq_pipe_2_r[0+:(HALF_LANES*TERM_WIDTH)]),
+        .sum_out   (lane_sum_lo_w)
     );
+
+    scloud_bdd_sum_tree #(
+        .TERMS    (HALF_LANES),
+        .IN_WIDTH (TERM_WIDTH),
+        .OUT_WIDTH(32)
+    ) u_lane_sum_hi (
+        .terms_flat(sq_pipe_2_r[(HALF_LANES*TERM_WIDTH)+:(HALF_LANES*TERM_WIDTH)]),
+        .sum_out   (lane_sum_hi_w)
+    );
+
+    assign lane_sum_w = lane_sum_lo_r + lane_sum_hi_r;
 
     /*
      * Keep the DSP data pipeline free of asynchronous reset so Vivado can
@@ -438,7 +493,11 @@ module scloud_bdd_distance_seq
             sq_pipe_1_r <= sq_flat;
         if (state == ST_MUL_2)
             sq_pipe_2_r <= sq_pipe_1_r;
-        if (state == ST_SUM)
+        if (state == ST_SUM_PART) begin
+            lane_sum_lo_r <= lane_sum_lo_w;
+            lane_sum_hi_r <= lane_sum_hi_w;
+        end
+        if (state == ST_SUM_FINAL)
             lane_sum_r <= lane_sum_w;
     end
 
@@ -478,9 +537,12 @@ module scloud_bdd_distance_seq
                     state <= ST_MUL_2;
                 end
                 ST_MUL_2: begin
-                    state <= ST_SUM;
+                    state <= ST_SUM_PART;
                 end
-                ST_SUM: begin
+                ST_SUM_PART: begin
+                    state <= ST_SUM_FINAL;
+                end
+                ST_SUM_FINAL: begin
                     state <= ST_ACCUM;
                 end
                 ST_ACCUM: begin
