@@ -1,6 +1,6 @@
 # Scloud+ MsgEnc/MsgDec 接入 SPUV3 RCE 说明
 
-本文记录 Scloud+ Barnes-Wall MsgEnc/MsgDec 加速器接入 SPUV3 RCE 的当前实现。目标是在保持 RCE 既有 SFR/DPRAM/RSA 类旁路模型的前提下获得较好的 PPA；不把 384/512-bit BW32 数据强行塞入 320-bit VPU VR 通路，也不复用 RSA 算法 datapath。当前基线已经完成 factor-8 半展开与 BDD32/BDD16 8-lane 精确距离共享，综合结果为 9,271 LUT、4,471 FF、48 DSP48。
+本文记录 Scloud+ Barnes-Wall MsgEnc/MsgDec 加速器接入 SPUV3 RCE 的当前实现。目标是在保持 RCE 既有 SFR/DPRAM/RSA 类旁路模型的前提下获得较好的 PPA；不把 384/512-bit BW32 数据强行塞入 320-bit VPU VR 通路，也不复用 RSA 算法 datapath。当前基线已经完成 factor-8 半展开、BDD32/BDD16 8-lane 精确距离共享、距离流水、候选存储压缩和分层启动隔离；Vivado 2019.1 standalone 约束综合结果为 8,680 LUT、7,274 FF、40 DSP48，200 MHz 下 WNS 为 +0.020 ns。
 
 ## 1. 接入原则
 
@@ -92,12 +92,11 @@ q_to_label/phi_decode/label_to_msg tau=3
 q_to_label/phi_decode/label_to_msg tau=4
 ```
 
-> 2026-06-22 active-RTL update: BDD32 now owns the only high-level 8-lane
-> distance engine and services zero-extended BDD16 requests. The previously
-> measured 48-DSP result predates this change. About 40 DSP48s are expected,
-> but a new Vivado run is required before that estimate becomes a measurement.
+> 2026-06-23 measured update: BDD32 owns the only high-level 8-lane distance
+> engine and services zero-extended BDD16 requests. The active constrained
+> standalone result contains 40 DSP48 blocks.
 
-其中 MsgEnc 基本是组合路径；MsgDec 的面积大头 BDD 已经合并为一套 runtime-tau datapath，并通过 factor-8 层级复用和 8-lane 高层距离共享把 DSP 从 256 降到 48。tau3/tau4 仍各保留一套轻量 label/message 后处理，避免把 C-model aligned 的硬编码 bit packing 变成复杂动态网络。
+其中 MsgEnc 基本是组合路径；MsgDec 的面积大头 BDD 已经合并为一套 runtime-tau datapath，并通过 factor-8 层级复用和 8-lane 高层距离共享把 DSP 从 256 降到 40。tau3/tau4 仍各保留一套轻量 label/message 后处理，避免把 C-model aligned 的硬编码 bit packing 变成复杂动态网络。
 
 工程 filelist：
 
@@ -412,16 +411,18 @@ tb/rce/tb_scloud_msgfunc_rce_accel.v
 
 ## 13. 最新 PPA 与 HW/SW 验证状态
 
-当前 Vivado 2019.1、XC7A200T、顶层 `scloud_msgfunc_rce_accel` 的最终综合结果为：
+当前 Vivado 2019.1、XC7A200T、顶层 `scloud_msgfunc_rce_accel`、5.000 ns 时钟约束的 standalone 综合结果为：
 
 ```text
-Total LUT = 9,271
-FF        = 4,471
-DSP48     = 48
-BDD LUT   = 7,351
-BDD FF    = 3,394
+Total LUT = 8,680
+FF        = 7,274
+DSP48     = 40
+BDD LUT   = 7,189
+BDD FF    = 5,860
+WNS       = +0.020 ns
+TNS       = 0
 ```
 
-相对最初 19,515 LUT、7,050 FF、256 DSP 的全并行版本，LUT 下降 52.5%，FF 下降 36.6%，DSP 下降 81.25%。功耗报告为 213.135 W，但因缺少时钟和活动约束且置信度为 Low，只能用于判断下降方向；Timing 仍无有效 WNS/TNS。
+相对最初 19,515 LUT、7,050 FF、256 DSP 的全并行版本，LUT 下降 55.5%，FF 因时序流水增加 3.2%，DSP 下降 84.4%。功耗报告为 0.578 W、动态 0.446 W，但因 standalone I/O 活动不具代表性且置信度为 Low，只能用于判断方向。综合约束虽然通过，但 WNS 仅 20 ps；当前最差路径仍是路由占 72.9% 的 BDD32 状态到 BDD16 状态 CE 控制路径，因此必须在真实 RCE subsystem 内完成 opt/place/route 后再判断 200 MHz 是否签核，建议 routed WNS 至少保留 +0.2 至 +0.3 ns。
 
 DS 辅助 HW/SW 验证链已经确认 9/9 KAT-derived SW MsgFunc roundtrip 和 2/2 RTL/SW MsgFunc cosim。完整 openHiTLS `pk/sk/ct/ss` 逐字节 KAT 尚未闭环，具体边界和后续任务见 `doc/SCLOUD_HW_SW_KAT_VERIFICATION.md`。

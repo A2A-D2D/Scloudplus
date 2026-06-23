@@ -9,9 +9,9 @@ unfold-factor-8 recursion reuse, and one exact 8-lane sequential distance
 engine shared by BDD32/BDD16. BDD8/BDD4 retain parallel distance logic to
 bound latency.
 
-The shared 8-lane engine pipelines difference inputs, two multiply stages,
-lane sum, accumulation, and comparison. This targets the constrained 200 MHz
-critical path while leaving the low-level parallel distance trees unchanged.
+The shared 8-lane engine and the low-level parallel distance trees pipeline
+difference, multiply, reduction, and comparison stages. Explicit hierarchical
+launch states prevent child-start control from spanning multiple BDD levels.
 
 BDD32 now accepts its 384-bit target as two 192-bit beats. The RCE wrapper
 streams Q halves directly from DPRAM and retains only one 192-bit scratch half
@@ -21,16 +21,16 @@ Vivado 2019.1 synthesis for XC7A200T, top `scloud_msgfunc_rce_accel`:
 
 | LUT | FF | DSP48 | BDD LUT | BDD FF |
 | ---: | ---: | ---: | ---: | ---: |
-| 9,271 | 4,471 | 48 | 7,351 | 3,394 |
+| 8,680 | 7,274 | 40 | 7,189 | 5,860 |
 
-This table is the last measured Vivado baseline. The active RTL now removes
-one of the two mutually exclusive high-level distance engines, so about 40
-DSP48s are expected; a new Vivado run is required before updating measured
-LUT/FF/DSP figures.
+With a 5.000 ns clock constraint, standalone synthesis reports WNS +0.020 ns,
+TNS 0, and no failing setup endpoints. This is synthesis closure, not timing
+sign-off: the 20 ps margin is too small to assume routed subsystem closure.
 
-Relative to the initial fully parallel BDD, LUT is down 52.5% and DSP48 is
-down 81.25%. Timing and absolute power are not yet sign-off data because the
-standalone synthesis has no user clock or switching-activity constraints.
+Relative to the initial fully parallel BDD, LUT is down 55.5% and DSP48 is
+down 84.4%; FF is up 3.2% because of timing pipelines. Estimated power is
+0.578 W at Low confidence. Final timing and power require implementation in
+the real RCE subsystem with internal DPRAM wiring and representative activity.
 
 ## Active RTL
 

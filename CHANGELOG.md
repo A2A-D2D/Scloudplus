@@ -33,6 +33,23 @@
 - RCE tau3/tau4, two/four-block, and fused-operation regression: PASS.
 - Updated WNS/TNS require a new constrained synthesis run.
 
+### Post-change constrained synthesis
+
+- Vivado 2019.1 standalone synthesis for XC7A200T reports 8,680 LUT, 7,274
+  FF, and 40 DSP48 blocks. The launch isolation costs only six FF compared
+  with the compacted violated run and preserves nearly all register savings.
+- The 5.000 ns constraint is met with WNS +0.020 ns, TNS 0, and zero failing
+  setup endpoints. Hold and pulse-width checks also pass.
+- The new worst path is a single-level BDD32-state to BDD16-state clock-enable
+  path: 4.598 ns data delay, five LUT levels, and 72.9 percent routing delay.
+  The previous three-level child-start chain no longer appears.
+- QoR suggestions report no issues. DRC retains 40 DSP MREG recommendations
+  and standalone-top I/O/configuration warnings; neither is the current
+  critical path.
+- Estimated power is 0.578 W total and 0.446 W dynamic at Low confidence.
+  The 20 ps synthesis margin is not implementation sign-off; real subsystem
+  place-and-route should target at least 0.2 to 0.3 ns positive routed slack.
+
 ## 2026-06-23 - BDD register storage compaction
 
 ### Changed
