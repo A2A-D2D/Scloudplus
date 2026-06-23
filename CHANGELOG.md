@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-06-23 - DSP multiplier register inference stage
+
+### Trigger
+
+- After candidate snapshots, DRC contains only 40 DSP MREG warnings plus the
+  standalone-top I/O warnings. All DSP input and PREG warnings are gone.
+- Vivado 2019.1 explicitly recommends an additional registered product stage
+  for inferred multipliers when both MREG and PREG should be used.
+
+### Changed
+
+- Added a third consecutive registered square-product stage to both the
+  parallel candidate-pair engine and the shared sequential distance engine.
+- The distance sum trees now consume the third product register. Arithmetic,
+  accumulation order, strict comparison, DSP count, and interfaces are
+  unchanged.
+- Local distance transactions gain one cycle; the shared engine gains one
+  cycle per 8-lane chunk. If Vivado absorbs the registers as intended, the
+  added storage maps primarily into DSP48 MREG/PREG rather than slice FFs.
+
+### Verification
+
+- Parallel pair and shared sequential distance tests each pass 200 random
+  cases plus two ties.
+- RCE tau3/tau4 two-block and tau3 four-block regressions pass.
+- MREG absorption, timing, slice FF impact, and power require a new synthesis.
+
 ## 2026-06-23 - Shared distance chunk snapshot
 
 ### Constrained synthesis trigger
